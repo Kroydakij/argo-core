@@ -24,4 +24,4 @@ Uso da un modulo della suite (nessuna installazione richiesta):
 """
 __version__ = "0.2.0"
 
-from . import codes, config, db, events, export, migrate, notify, schedule  # noqa: F401,E402
+from . import codes, config, db, events, export, migrate, notify, schedule, statemachine  # noqa: F401,E402
