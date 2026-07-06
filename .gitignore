@@ -1,0 +1,23 @@
+# Bytecode Python (rigenerato a ogni esecuzione: mai versionato)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Artefatti di test / build
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Database e cartella dati locali (la cartella dati vive fuori dal repo:
+# vedi ARGO_COMUNE). Presenti qui solo se qualcuno prova in-tree.
+*.sqlite
+*.sqlite3
+*.db
+comune/
+
+# Ambienti virtuali / editor
+.venv/
+venv/
+.idea/
+.vscode/
