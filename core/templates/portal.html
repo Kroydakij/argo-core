@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ titolo }} · Portale</title>
+<style>
+  :root { --bg:#12161c; --card:#1c232d; --bordo:#2c3644; --testo:#e6ebf2;
+          --muto:#8a97a8; --acc:#4da3ff; --ok:#38c172; --ko:#e3342f; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--testo);
+         font:15px/1.45 system-ui, Segoe UI, sans-serif; }
+  header { padding:18px 24px; border-bottom:1px solid var(--bordo);
+           display:flex; align-items:baseline; gap:12px; }
+  header h1 { margin:0; font-size:22px; letter-spacing:.5px; }
+  header span { color:var(--muto); font-size:13px; }
+  main { max-width:1100px; margin:0 auto; padding:24px; }
+  h2 { font-size:15px; color:var(--muto); text-transform:uppercase;
+       letter-spacing:1px; margin:28px 0 12px; }
+  .griglia { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+             gap:14px; }
+  a.tile { background:var(--card); border:1px solid var(--bordo); border-radius:10px;
+           padding:16px; text-decoration:none; color:inherit; display:block;
+           transition:border-color .15s; }
+  a.tile:hover { border-color:var(--acc); }
+  .tile .nome { font-weight:600; font-size:17px; display:flex;
+                align-items:center; gap:8px; }
+  .tile .desc { color:var(--muto); font-size:13px; margin-top:6px; min-height:18px; }
+  .tile .porta { color:var(--muto); font-size:12px; margin-top:8px; }
+  .pallino { width:9px; height:9px; border-radius:50%; background:var(--muto);
+             display:inline-block; flex:none; }
+  .pallino.ok { background:var(--ok); } .pallino.ko { background:var(--ko); }
+  .vuoto { color:var(--muto); padding:12px 0; }
+  form.inline { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  input, button, select { background:var(--card); color:var(--testo);
+        border:1px solid var(--bordo); border-radius:7px; padding:8px 10px;
+        font:inherit; }
+  input:focus, select:focus { outline:none; border-color:var(--acc); }
+  button { cursor:pointer; } button.primario { border-color:var(--acc); }
+  table { border-collapse:collapse; width:100%; font-size:13px; margin-top:10px; }
+  th, td { border:1px solid var(--bordo); padding:5px 8px; text-align:left;
+           white-space:nowrap; max-width:340px; overflow:hidden;
+           text-overflow:ellipsis; }
+  th { background:var(--card); position:sticky; top:0; }
+  .scroll { overflow:auto; max-height:60vh; border:1px solid var(--bordo);
+            border-radius:8px; }
+  .barra { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .msg { color:var(--muto); font-size:13px; margin-left:6px; }
+</style>
+</head>
+<body>
+<header><h1>{{ titolo }}</h1><span>portale della suite</span></header>
+<main>
+
+  <h2>Moduli</h2>
+  <div id="griglia" class="griglia"></div>
+  <div id="nessun-modulo" class="vuoto" hidden>
+    Nessun modulo registrato: aggiungi il primo qui sotto.
+  </div>
+
+  <h2>Registra / aggiorna modulo <span class="msg">(richiede login admin)</span></h2>
+  <form class="inline" id="form-mod">
+    <input id="f-nome" placeholder="nome (es. board)" required>
+    <input id="f-porta" type="number" placeholder="porta" required
+           min="1024" max="49151" style="width:110px">
+    <input id="f-desc" placeholder="descrizione" style="flex:1;min-width:200px">
+    <button class="primario">Salva</button>
+    <span class="msg" id="msg-mod"></span>
+  </form>
+
+  <h2>Browser database <span class="msg">(sola lettura · richiede login admin)</span></h2>
+  <div class="barra">
+    <select id="sel-db"><option value="">— database —</option></select>
+    <select id="sel-tab" disabled><option value="">— tabella —</option></select>
+    <button id="btn-prev" disabled>◀</button>
+    <button id="btn-next" disabled>▶</button>
+    <a id="lnk-csv" hidden><button type="button">Export CSV</button></a>
+    <span class="msg" id="msg-db"></span>
+  </div>
+  <div class="scroll" id="wrap-tabella" hidden><table id="tabella"></table></div>
+
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let offset = 0;
+
+/* ---- moduli + health ---- */
+async function caricaModuli() {
+  const r = await fetch("/api/moduli"); const d = await r.json();
+  const g = $("griglia"); g.innerHTML = "";
+  $("nessun-modulo").hidden = d.moduli.length > 0;
+  $("f-porta").placeholder = "porta (prox: " + d.prossima_porta + ")";
+  for (const m of d.moduli) {
+    const a = document.createElement("a");
+    a.className = "tile"; a.target = "_blank";
+    a.href = "http://" + d.host + ":" + m.porta + "/";
+    a.innerHTML = '<div class="nome"><span class="pallino" data-mod="' + m.nome +
+      '"></span>' + m.nome + (m.attivo ? "" : " (disattivo)") + "</div>" +
+      '<div class="desc">' + (m.descrizione || "") + "</div>" +
+      '<div class="porta">porta ' + m.porta + "</div>";
+    g.appendChild(a);
+  }
+  aggiornaSalute();
+}
+async function aggiornaSalute() {
+  try {
+    const d = await (await fetch("/api/health")).json();
+    document.querySelectorAll(".pallino[data-mod]").forEach(p => {
+      const vivo = d[p.dataset.mod];
+      p.classList.toggle("ok", vivo === true);
+      p.classList.toggle("ko", vivo === false);
+    });
+  } catch (e) {}
+}
+$("form-mod").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const r = await fetch("/api/moduli", { method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ nome:$("f-nome").value, porta:$("f-porta").value,
+                           descrizione:$("f-desc").value }) });
+  $("msg-mod").textContent = r.ok ? "salvato" :
+    (r.status === 401 ? "login richiesto: ricarica e autenticati" : "errore");
+  if (r.ok) { ev.target.reset(); caricaModuli(); }
+});
+
+/* ---- browser DB (via blueprint /api/db) ---- */
+async function caricaDatabases() {
+  const r = await fetch("/api/db/databases");
+  if (!r.ok) { $("msg-db").textContent = "login richiesto"; return; }
+  for (const db of await r.json()) {
+    const o = new Option(db.alias + " (" + db.file + ")", db.alias);
+    $("sel-db").add(o);
+  }
+}
+$("sel-db").addEventListener("change", async () => {
+  const db = $("sel-db").value; const st = $("sel-tab");
+  st.innerHTML = '<option value="">— tabella —</option>'; st.disabled = !db;
+  $("wrap-tabella").hidden = true; $("lnk-csv").hidden = true;
+  if (!db) return;
+  for (const t of await (await fetch("/api/db/" + db + "/tabelle")).json())
+    st.add(new Option(t.nome + " · " + t.righe + " righe" +
+                      (t.tipo === "view" ? " (vista)" : ""), t.nome));
+});
+$("sel-tab").addEventListener("change", () => { offset = 0; caricaRighe(); });
+$("btn-prev").addEventListener("click", () => { offset = Math.max(0, offset - 50); caricaRighe(); });
+$("btn-next").addEventListener("click", () => { offset += 50; caricaRighe(); });
+async function caricaRighe() {
+  const db = $("sel-db").value, tab = $("sel-tab").value;
+  if (!db || !tab) return;
+  const d = await (await fetch("/api/db/" + db + "/righe/" + tab +
+                               "?offset=" + offset)).json();
+  const t = $("tabella");
+  t.innerHTML = "<tr>" + d.colonne.map(c => "<th>" + c + "</th>").join("") + "</tr>" +
+    d.righe.map(r => "<tr>" + r.map(v =>
+      "<td>" + (v === null ? "" : String(v)) + "</td>").join("") + "</tr>").join("");
+  $("wrap-tabella").hidden = false;
+  $("btn-prev").disabled = offset === 0;
+  $("btn-next").disabled = d.righe.length < 50;
+  $("lnk-csv").href = "/api/db/" + db + "/export/" + tab + ".csv";
+  $("lnk-csv").hidden = false;
+  $("msg-db").textContent = "offset " + offset;
+}
+
+caricaModuli(); caricaDatabases();
+setInterval(aggiornaSalute, 30000);
+</script>
+</body>
+</html>
