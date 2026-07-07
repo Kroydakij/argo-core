@@ -1,0 +1,12 @@
+# Cosa NON entra nello zip di release (git archive). Nel pacchetto va il
+# framework + esempio + docs; restano fuori i file di sviluppo.
+tests/          export-ignore
+scripts/        export-ignore
+.gitignore      export-ignore
+.gitattributes  export-ignore
+
+# Normalizzazione line-ending: sorgenti sempre LF anche su Windows.
+*.py    text eol=lf
+*.md    text eol=lf
+*.toml  text eol=lf
+*.html  text eol=lf
