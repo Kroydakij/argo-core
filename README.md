@@ -75,8 +75,22 @@ La cartella dati e' `..\comune` (override: variabile ARGO_COMUNE); la
 config opzionale vive in `comune\portal.json` cosi' sopravvive agli
 aggiornamenti della cartella core.
 
+## Fase 2 (0.3.0)
+
+Layer applicativo event-sourced, tutto stdlib (Flask/Werkzeug lazy dove serve):
+
+- `core.config` — configurazione TOML fail-fast
+- `core.events` — log append-only + proiezione `latest_state_per_entity`
+- `core.statemachine` — transizioni dichiarative
+- `core.shifts` — turni parametrici a tempo di lettura
+- `core.forms` — form-engine dichiarativo (validazione + render)
+- `core.auth` — utenti e ruoli (hashing Werkzeug)
+- `core.board` — board config-driven
+- `core.scaffold` — `python -m core.scaffold <nome>`, con demo in `examples/`
+
+Vedi `CHANGELOG.md` per il dettaglio.
+
 ## Roadmap
 
-- Fase 2: `core.auth` (ruoli su tabella utenti condivisa, Basic Auth)
-- Fase 4: `core.inventory` (inventario generico), scaffolder,
-  `CORE_CONTESTO_AI.md`
+- `core.inventory` (inventario generico)
+- `CORE_CONTESTO_AI.md` (istruzioni per AI)

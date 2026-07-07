@@ -1,0 +1,48 @@
+# Config del modulo demo "presenze attrezzatura".
+# Config rotta = avvio negato (fail-fast). Tutto cio' che e' di dominio
+# (quali attrezzi, quali stati, ogni quanto la manutenzione) vive QUI, non nel
+# codice: e' il pattern config-driven della suite.
+
+[app]
+titolo = "Presenze attrezzatura"
+porta = 4710
+
+# Attrezzi tracciati. Nomi d'esempio, del tutto generici.
+[attrezzi]
+elenco = ["Trapano-01", "Avvitatore-02", "Multimetro-03", "Scala-04"]
+manutenzione_giorni = 30        # cadenza manutenzione per attrezzo
+
+# Macchina a stati del ciclo di vita di un attrezzo.
+[macchina]
+iniziale = "DISPONIBILE"
+[macchina.transizioni]
+DISPONIBILE = { preleva = "IN_USO", invia_manutenzione = "MANUTENZIONE" }
+IN_USO = { restituisci = "DISPONIBILE", invia_manutenzione = "MANUTENZIONE" }
+MANUTENZIONE = { ripristina = "DISPONIBILE" }
+
+# Board: colonne e stati che vi confluiscono.
+[board]
+campi_tile = ["operatore"]
+[[board.colonne]]
+titolo = "Disponibili"
+stati = ["DISPONIBILE"]
+[[board.colonne]]
+titolo = "In uso"
+stati = ["IN_USO"]
+[[board.colonne]]
+titolo = "In manutenzione"
+stati = ["MANUTENZIONE"]
+
+# Turni parametrici (orari d'esempio, non prescritti).
+[[turni]]
+nome = "A"
+inizio = "06:00"
+fine = "14:00"
+[[turni]]
+nome = "B"
+inizio = "14:00"
+fine = "22:00"
+[[turni]]
+nome = "C"
+inizio = "22:00"
+fine = "06:00"

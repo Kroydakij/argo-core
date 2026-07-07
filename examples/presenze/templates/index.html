@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ titolo }}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1.5rem; color: #222; }
+    h1 { margin-bottom: .2rem; }
+    .turno { color: #666; margin-bottom: 1rem; }
+    .board { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .colonna { flex: 1 1 12rem; background: #f4f4f6; border-radius: 8px; padding: .6rem; }
+    .colonna h3 { margin: .2rem 0 .6rem; font-size: 1rem; }
+    .conteggio { color: #888; font-weight: normal; }
+    .tile { background: #fff; border: 1px solid #ddd; border-radius: 6px;
+            padding: .4rem .6rem; margin-bottom: .4rem; }
+    .tile .nome { font-weight: 600; }
+    .tile .meta { color: #777; font-size: .85rem; }
+    .campo { margin: .4rem 0; }
+    .campo label { display: block; font-size: .85rem; color: #555; }
+    .errore { color: #b00; font-size: .8rem; margin-left: .4rem; }
+    form.movimento { margin: 1rem 0; padding: .8rem; background: #eef; border-radius: 8px;
+                     max-width: 22rem; }
+    .flash { background: #ffd; border: 1px solid #dd8; padding: .4rem .6rem;
+             border-radius: 6px; margin: .6rem 0; }
+    table.manut { border-collapse: collapse; margin-top: 1rem; }
+    table.manut td, table.manut th { border: 1px solid #ddd; padding: .3rem .6rem;
+                                     text-align: left; font-size: .9rem; }
+    .ok { color: #2a7; } .da_fare { color: #b80; } .scaduta { color: #b00; }
+  </style>
+</head>
+<body>
+  <h1>{{ titolo }}</h1>
+  <div class="turno">Turno corrente: <strong>{{ turno }}</strong></div>
+
+  {% with messaggi = get_flashed_messages() %}
+    {% for m in messaggi %}<div class="flash">{{ m }}</div>{% endfor %}
+  {% endwith %}
+
+  <form class="movimento" method="post" action="{{ url_for('movimento') }}">
+    {{ form | safe }}
+    <button type="submit">Registra movimento</button>
+  </form>
+
+  {{ board | safe }}
+
+  <table class="manut">
+    <tr><th>Attrezzo</th><th>Manutenzione</th><th>Prossima</th></tr>
+    {% for attrezzo, dati in manutenzioni.items() %}
+      {% for t in dati.tasks %}
+      <tr>
+        <td>{{ attrezzo }}</td>
+        <td class="{{ t.stato }}">{{ t.stato }}</td>
+        <td>{{ t.prossima }}</td>
+      </tr>
+      {% endfor %}
+    {% endfor %}
+  </table>
+</body>
+</html>
