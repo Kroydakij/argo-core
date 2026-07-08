@@ -49,8 +49,9 @@ Solo stdlib: la suite gira su un Python 3.12+ appena installato.
    scheduling astratto. Niente logiche di dominio.
 3. **Zero dipendenze obbligatorie**: stdlib; Flask opzionale e lazy.
 4. Le regole architetturali complete per costruire moduli sopra core
-   (ownership dei database, log append-only, single write-point) vivono
-   in `CORE_CONTESTO_AI.md` (in arrivo con la fase 4).
+   (ownership dei database, log append-only, single write-point), l'API
+   reference e la checklist di consegna vivono in `CORE_CONTESTO_AI.md`:
+   è il documento da dare a un'AI per farsi costruire un modulo.
 
 ## Porte
 
@@ -93,4 +94,3 @@ Vedi `CHANGELOG.md` per il dettaglio.
 ## Roadmap
 
 - `core.inventory` (inventario generico)
-- `CORE_CONTESTO_AI.md` (istruzioni per AI)
