@@ -5,6 +5,15 @@ Tutte le modifiche rilevanti a argo-core. Formato ispirato a
 [SemVer](https://semver.org/lang/it/). Serie `0.x` = pre-1.0, API di `core.*`
 ancora passibile di aggiustamenti tra minor.
 
+## [Non rilasciato]
+
+### Aggiunto
+
+- **`CORE_CONTESTO_AI.md`** — il contesto da dare a un assistente AI per
+  costruire moduli compatibili: regole non negoziabili, API reference delle
+  firme pubbliche di `core.*`, guida allo scaffolder, pattern di composizione
+  e checklist di consegna per moduli generati da AI.
+
 ## [0.3.0] — 2026-07-07
 
 ### Aggiunto — Fase 2 (layer applicativo event-sourced)
