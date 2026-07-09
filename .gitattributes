@@ -2,6 +2,7 @@
 # framework + esempio + docs; restano fuori i file di sviluppo.
 tests/          export-ignore
 scripts/        export-ignore
+.github/        export-ignore
 .gitignore      export-ignore
 .gitattributes  export-ignore
 
