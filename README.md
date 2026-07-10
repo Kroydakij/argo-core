@@ -87,10 +87,12 @@ Layer applicativo event-sourced, tutto stdlib (Flask/Werkzeug lazy dove serve):
 - `core.forms` — form-engine dichiarativo (validazione + render)
 - `core.auth` — utenti e ruoli (hashing Werkzeug)
 - `core.board` — board config-driven
+- `core.inventory` — inventario generico event-sourced (anagrafica +
+  movimenti append-only + giacenze come proiezione)
 - `core.scaffold` — `python -m core.scaffold <nome>`, con demo in `examples/`
 
 Vedi `CHANGELOG.md` per il dettaglio.
 
 ## Roadmap
 
-- `core.inventory` (inventario generico)
+- consolidamento dell'API di `core.*` verso la 1.0
