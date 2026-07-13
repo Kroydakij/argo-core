@@ -1,0 +1,50 @@
+# CI di argo-core: a ogni push su main e a ogni pull request, i test girano
+# da soli e il risultato compare come check (verde/rosso) sulla PR.
+#
+# Tre lavori, che verificano le promesse del progetto:
+#   1. stdlib  — suite SENZA Flask installato: deve restare verde (con skip),
+#                come da regola "zero dipendenze obbligatorie".
+#   2. flask   — suite completa (93 test) con Flask+Werkzeug.
+#   3. windows — suite completa su Windows, la piattaforma di destinazione.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  stdlib:
+    name: stdlib puro (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.13"]   # 3.11 = minimo supportato (tomllib)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover tests -v
+
+  flask:
+    name: completo con Flask
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install flask
+      - run: python -m unittest discover tests -v
+
+  windows:
+    name: completo su Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install flask
+      - run: python -m unittest discover tests -v

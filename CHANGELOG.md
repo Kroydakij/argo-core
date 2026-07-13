@@ -13,6 +13,16 @@ ancora passibile di aggiustamenti tra minor.
   costruire moduli compatibili: regole non negoziabili, API reference delle
   firme pubbliche di `core.*`, guida allo scaffolder, pattern di composizione
   e checklist di consegna per moduli generati da AI.
+- **CI (GitHub Actions)** — test automatici su push e PR: suite senza Flask
+  (py3.11/3.13, verifica la promessa stdlib-only), suite completa con Flask,
+  e suite completa su Windows (la piattaforma di destinazione).
+- **`core.inventory`** — inventario generico event-sourced: anagrafica
+  articoli (upsert, soglia minima opzionale) + movimenti append-only con
+  single write-point (`movimenta()`, quantità sempre positive, segno dato
+  dalla causale dichiarata in config) + giacenza come proiezione (vista
+  `giacenze` = somma dei movimenti) + `sotto_scorta()` a tempo di lettura.
+  Nessun dominio nel core: causali, articoli e soglie vivono nel TOML del
+  modulo.
 
 ## [0.3.0] — 2026-07-07
 

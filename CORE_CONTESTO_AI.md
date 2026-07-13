@@ -313,6 +313,48 @@ Board.da_config(sezione) -> Board            # sezione [board] del TOML
 Si alimenta con `events.stato_corrente(con)`. Gli stati non mappati non
 vengono mostrati (vista configurata; lo storico resta intero nel log).
 
+### core.inventory — inventario generico event-sourced
+
+```python
+class GiacenzaInsufficiente(Exception)   # scarico rifiutato da movimenta()
+
+Inventario(causali: dict[str, str], *, consenti_negativo=False,
+           tabella_articoli="articoli", tabella_movimenti="movimenti",
+           vista_giacenze="giacenze")
+    # causali: {nome: "+"|"-"} — verso fisso per causale, dichiarato in config
+Inventario.da_config(sezione) -> Inventario   # sezione [inventario] del TOML
+.migra(con, *, extra_articoli=None, extra_movimenti=None) -> None
+    # anagrafica + log movimenti + vista giacenze (ricreata alla fine)
+.crea_articolo(con, codice, descrizione="", unita="pz", soglia_minima=None)  # upsert
+.disattiva_articolo(con, codice, *, attivo=False)  # via dalle giacenze, storico intatto
+.lista_articoli(con, *, solo_attivi=True) -> list[dict]
+.movimenta(con, codice, quantita, causale, *, sorgente="MANUALE",
+           operatore=None, note=None, extra=None) -> int
+    # SINGLE WRITE-POINT (solo INSERT). quantita SEMPRE positiva: il segno lo
+    # da' la causale. Rifiuta causale ignota, quantita<=0, articolo ignoto o
+    # disattivato, scarico sotto zero (salvo consenti_negativo) -> GiacenzaInsufficiente
+.giacenza(con, codice=None) -> list[dict] | dict | None   # proiezione SUM(movimenti)
+.sotto_scorta(con) -> list[dict]     # giacenza <= soglia_minima, a tempo di lettura
+.storico(con, codice) -> list[dict]  # movimenti in ordine cronologico
+```
+
+La giacenza non è un campo: è la **somma dei movimenti** (vista `giacenze`,
+solo articoli attivi). Le correzioni sono movimenti di rettifica (causali
+dedicate), mai UPDATE. La normalizzazione dei codici articolo resta compito
+del modulo, con `core.codes`, **prima** di chiamare queste funzioni.
+
+Config tipo:
+
+```toml
+[inventario]
+consenti_negativo = false
+[inventario.causali]
+CARICO = "+"
+CONSUMO = "-"
+RETTIFICA_PIU = "+"
+RETTIFICA_MENO = "-"
+```
+
 ### core.codes — normalizzazione codici
 
 ```python
@@ -454,5 +496,6 @@ soddisfatta, il modulo non è pronto.
 
 ---
 
-*Versione del documento: allineata a argo-core 0.3.0. Se le firme in `core/`
-divergono da questo file, fa fede il codice — e questo file va aggiornato.*
+*Questo documento vive nel repository e si aggiorna insieme al codice: fa fede
+la versione presente sullo stesso commit. Se le firme in `core/` divergono da
+questo file, fa fede il codice — e questo file va aggiornato.*
