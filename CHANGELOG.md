@@ -5,7 +5,7 @@ Tutte le modifiche rilevanti a argo-core. Formato ispirato a
 [SemVer](https://semver.org/lang/it/). Serie `0.x` = pre-1.0, API di `core.*`
 ancora passibile di aggiustamenti tra minor.
 
-## [Non rilasciato]
+## [0.4.0] — 2026-07-13
 
 ### Aggiunto
 
@@ -70,4 +70,5 @@ Libreria di base (`db`, `migrate`, `codes`, `notify`, `schedule`, `export`) e
 portale (`portal`, `adminbrowser`): registro moduli, health-check, browser DB
 read-only. Punto di partenza di questo changelog.
 
+[0.4.0]: https://github.com/Kroydakij/argo-core/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Kroydakij/argo-core/releases/tag/v0.3.0

@@ -33,6 +33,6 @@ Uso da un modulo della suite (nessuna installazione richiesta):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from core import db, migrate, export
 """
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from . import auth, board, codes, config, db, events, export, forms, inventory, migrate, notify, schedule, shifts, statemachine  # noqa: F401,E402
