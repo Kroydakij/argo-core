@@ -70,6 +70,30 @@ ancora passibile di aggiustamenti tra minor.
   manifest, eventi con busta (chi = utente della sessione), schema con
   `core.migrazioni`, pagina nella cornice comune.
 
+- **`core.anagrafica`** (kernel, ADR-002 parte 1) — entità condivise in
+  `comune/anagrafica.sqlite`: ID stabile (UUID) separato dal codice umano,
+  tipo configurato in `argo.toml` (`[anagrafica.tipi.<nome>]`, con regole di
+  normalizzazione dichiarative), stato `ATTIVO`/`OBSOLETO`/`FUSO`, alias
+  (codici esterni per sistema), attributi liberi solo descrittivi (niente
+  EAV). Creazioni, rinomine, descrizioni, cambi di stato, alias e fusioni
+  sono eventi con la busta; entità, alias, codici storici e catena delle
+  fusioni sono viste. Lettura: `apri()`, `risolvi()` (codice corrente, alias,
+  storico → ID canonico), `entita()`, `elenco()`, `canonico()`. Scrittura
+  solo dalla shell e dalla CLI; i moduli usano `anagrafica.client` (HTTP
+  verso la shell, come l'utente della richiesta).
+- **Shell: anagrafica** — pagina `/anagrafica` (consultazione per tutti,
+  modifica con il permesso del tipo) e API `/api/anagrafica/...`. Un permesso
+  di scrittura per tipo, generato dal kernel:
+  `core.anagrafica.modifica.<tipo>`, nel catalogo dei ruoli.
+- **CLI** `python -m core.anagrafica importa --tipo T file.csv [--come utente]`:
+  import iniziale idempotente sul codice normalizzato.
+- **`core.codes.componi(regole)`** — normalizzazione dichiarativa (`strip`,
+  `maiuscolo`, `minuscolo`, `senza_spazi`, `zfill:N`).
+- **`core.db.attach_readonly(con, path, alias)`** — JOIN con un DB altrui in
+  `mode=ro` (es. log del modulo × anagrafica).
+- `auth.inizializza()` nega l'avvio di un modulo che dichiara nel manifest un
+  tipo di anagrafica non configurato in `argo.toml`.
+
 ### Rimosso
 
 - **`core.events.registra(con, entita, stato, operatore=...)`** (0.x):
@@ -95,6 +119,9 @@ ancora passibile di aggiustamenti tra minor.
 
 ### Cambiato
 
+- **`core.config.carica_suite()`** ritorna anche `tipi` (tipi di anagrafica).
+- **`core.db.owned()`** apre il file come URI SQLite (`mode=rwc`); firma e
+  comportamento invariati.
 - **Scaffolder**: genera anche `manifest.toml` (permesso `<nome>.vedi`, una
   voce di menu, intervallo `core` dalla versione corrente).
 - **Portale**: le tile dei moduli sono costruite con `textContent` (niente

@@ -4,8 +4,9 @@ core.shell — la shell della suite: login unico, cornice, menu, amministrazione
 Kernel (ADR-001, ex core.portal). Processo Flask sulla porta 4700 (blocco
 della suite 4700-4799). E' l'UNICO scrittore dei DB del kernel nella cartella
 dati comune:
-  - core.sqlite  registro dei moduli, scoperti dai manifest (ADR-003);
-  - auth.sqlite  utenti, gruppi, ruoli, sessioni (core.auth).
+  - core.sqlite        registro dei moduli, scoperti dai manifest (ADR-003);
+  - auth.sqlite        utenti, gruppi, ruoli, sessioni (core.auth);
+  - anagrafica.sqlite  entita' condivise (core.anagrafica, ADR-002).
 
 Cosa fa:
   - login/logout: imposta il cookie `argo_sessione`, valido per tutti i moduli
@@ -13,6 +14,9 @@ Cosa fa:
   - home: i moduli che l'utente puo' usare, nella cornice comune;
   - "cambia password" per tutti;
   - amministrazione utenti/gruppi/ruoli (permesso core.utenti);
+  - anagrafica: consultazione per tutti, scrittura con il permesso del tipo
+    (core.anagrafica.modifica.<tipo>), via pagina /anagrafica o API usata da
+    anagrafica.client nei moduli;
   - registro moduli, health-check, browser DB read-only (permesso core.admin).
 
 Configurazione: comune/argo.toml (obbligatorio, vedi core.config.carica_suite).
@@ -32,7 +36,7 @@ from urllib.parse import urlsplit
 from flask import (Flask, Response, g, jsonify, redirect, render_template,
                    request)
 
-from . import __version__, adminbrowser, auth, busta, registro
+from . import __version__, adminbrowser, anagrafica, auth, busta, registro
 from . import config as corecfg
 from . import db as coredb
 from . import manifest as coremanifest
@@ -77,13 +81,14 @@ def sfasamento_orologio(porta: int, timeout: float = 1.0) -> float | None:
     return (parsedate_to_datetime(data) - datetime.now(timezone.utc)).total_seconds()
 
 
-def manifest_shell(titolo: str = "ARGO") -> coremanifest.Manifest:
-    """La shell dichiara i permessi del kernel come un modulo qualunque."""
+def manifest_shell(titolo: str = "ARGO", tipi: dict | None = None) -> coremanifest.Manifest:
+    """La shell dichiara i permessi del kernel come un modulo qualunque:
+    quelli fissi + uno di scrittura per ogni tipo di anagrafica configurato."""
+    perm = {**auth.PERMESSI_KERNEL, **anagrafica.permessi(tipi or {})}
     return coremanifest.da_dict({
         "modulo": {"nome": "core", "versione": __version__, "core": ">=0.0",
                    "titolo": titolo},
-        "permessi": [{"id": k, "descrizione": v}
-                     for k, v in auth.PERMESSI_KERNEL.items()],
+        "permessi": [{"id": k, "descrizione": v} for k, v in perm.items()],
     })
 
 
@@ -106,8 +111,10 @@ def create_app(comune: Path | None = None, radice: Path | None = None) -> Flask:
     suite = corecfg.carica_suite(comune)
     core_db, auth_db = comune / "core.sqlite", auth.percorso_db(comune)
 
+    ana_db = anagrafica.percorso_db(comune)
     migrazioni.applica(core_db, registro.PASSI_CORE)   # backup + versione
     auth.prepara_db(auth_db)
+    anagrafica.prepara_db(ana_db, suite["tipi"])      # + tipi da argo.toml
     con = coredb.owned(auth_db)
     try:
         if not auth.utenti(con):
@@ -122,6 +129,11 @@ def create_app(comune: Path | None = None, radice: Path | None = None) -> Flask:
 
     def db_auth():
         return coredb.owned(auth_db)
+
+    def db_ana():
+        return coredb.owned(ana_db)
+
+    m_shell = manifest_shell(suite["titolo"], suite["tipi"])
 
     def rileggi() -> dict:
         con = db_core()
@@ -238,7 +250,8 @@ def create_app(comune: Path | None = None, radice: Path | None = None) -> Flask:
         return render_template(
             "shell_home.html",
             admin=auth.ha_permesso(g.utente, "core.admin"),
-            gestione_utenti=auth.ha_permesso(g.utente, "core.utenti"))
+            gestione_utenti=auth.ha_permesso(g.utente, "core.utenti"),
+            anagrafica=bool(suite["tipi"]))
 
     @app.get("/api/moduli")
     @auth.pubblica                           # lo scaffolder legge prossima_porta
@@ -331,8 +344,8 @@ def create_app(comune: Path | None = None, radice: Path | None = None) -> Flask:
     def api_utenti():
         con, cc = db_auth(), db_core()
         try:
-            catalogo = [{"id": k, "descrizione": v, "modulo": "core"}
-                        for k, v in auth.PERMESSI_KERNEL.items()]
+            catalogo = [{"id": p.id, "descrizione": p.descrizione, "modulo": "core"}
+                        for p in m_shell.permessi]
             for m in registro.manifesti(cc):
                 catalogo += [{"id": p["id"], "descrizione": p["descrizione"],
                               "modulo": m["nome"]} for p in m["permessi"]]
@@ -412,14 +425,156 @@ def create_app(comune: Path | None = None, radice: Path | None = None) -> Flask:
             con, rid, utente_id=d.get("utente_id") or None,
             gruppo_id=d.get("gruppo_id") or None, attore=g.utente["id"])))
 
-    return auth.inizializza(app, manifest=manifest_shell(suite["titolo"]),
+    # --- anagrafica (ADR-002): lettura per tutti, scrittura per tipo ----------------
+
+    def _puo_modificare(tipo: str) -> bool:
+        return auth.ha_permesso(g.utente, anagrafica.permesso_tipo(tipo))
+
+    def _con_ana(f):
+        con = db_ana()
+        try:
+            return f(con)
+        finally:
+            con.close()
+
+    def esito_ana(f):
+        try:
+            return jsonify({"ok": True, **(_con_ana(f) or {})})
+        except PermissionError as e:
+            return jsonify({"ok": False, "msg": str(e)}), 403
+        except anagrafica.AnagraficaError as e:
+            return jsonify({"ok": False, "msg": str(e)}), 400
+
+    def _tipo_scrivibile(tipo: str) -> None:
+        if not _puo_modificare(tipo):
+            raise PermissionError(f"Permesso richiesto: {anagrafica.permesso_tipo(tipo)}")
+
+    def _entita_scrivibile(con, eid: str) -> dict:
+        e = anagrafica.entita(con, eid)
+        if e is None:
+            raise anagrafica.AnagraficaError(f"entita' sconosciuta: {eid!r}")
+        _tipo_scrivibile(e["tipo"])
+        return e
+
+    @app.get("/anagrafica")
+    def pagina_anagrafica():
+        return render_template("shell_anagrafica.html")
+
+    @app.get("/api/anagrafica/tipi")
+    def api_ana_tipi():
+        return jsonify({"tipi": [
+            {"tipo": t, **d, "modificabile": _puo_modificare(t)}
+            for t, d in _con_ana(anagrafica.tipi).items()]})
+
+    @app.get("/api/anagrafica/entita")
+    def api_ana_elenco():
+        tipo = request.args.get("tipo", "")
+        stati = [s for s in request.args.get("stati", "ATTIVO").split(",") if s]
+        return esito_ana(lambda con: {"entita": anagrafica.elenco(con, tipo, stati=stati)})
+
+    @app.get("/api/anagrafica/entita/<eid>")
+    def api_ana_entita(eid):
+        def f(con):
+            e = anagrafica.entita(con, eid)
+            if e is None:
+                raise anagrafica.AnagraficaError(f"entita' sconosciuta: {eid!r}")
+            sto = anagrafica.storico(con, eid)
+            ca = db_auth()
+            try:
+                attori = {a: (auth.utente(ca, a) or {}).get("username", a)
+                          for a in {s["attore_id"] for s in sto} if a != busta.SISTEMA}
+            finally:
+                ca.close()
+            codici = {x: (anagrafica.entita(con, x) or {}).get("codice", x)
+                      for x in {s["fusa_in"] for s in sto if s["fusa_in"]}
+                      | ({s["entita_id"] for s in sto} - {eid})}
+            return {"entita": e, "alias": anagrafica.alias(con, eid), "storico": sto,
+                    "canonico": anagrafica.canonico(con, eid), "attori": attori,
+                    "codici": codici}
+        return esito_ana(f)
+
+    @app.get("/api/anagrafica/risolvi")
+    def api_ana_risolvi():
+        a = request.args
+        def f(con):
+            r = anagrafica.risolvi(con, a.get("tipo", ""), a.get("codice", ""),
+                                   sistema=a.get("sistema") or None)
+            return {"risoluzione": r.__dict__ if r else None}
+        return esito_ana(f)
+
+    @app.post("/api/anagrafica/entita")
+    def api_ana_crea():
+        d = _json()
+        def f(con):
+            _tipo_scrivibile(d.get("tipo", ""))
+            return {"id": anagrafica.crea(
+                con, d.get("tipo", ""), d.get("codice", ""), attore=g.utente["id"],
+                descrizione=d.get("descrizione") or "", attributi=d.get("attributi"))}
+        return esito_ana(f)
+
+    @app.post("/api/anagrafica/entita/<eid>/rinomina")
+    def api_ana_rinomina(eid):
+        d = _json()
+        def f(con):
+            _entita_scrivibile(con, eid)
+            return {"codice": anagrafica.rinomina(con, eid, d.get("codice", ""),
+                                                  attore=g.utente["id"])}
+        return esito_ana(f)
+
+    @app.post("/api/anagrafica/entita/<eid>/descrivi")
+    def api_ana_descrivi(eid):
+        d = _json()
+        def f(con):
+            _entita_scrivibile(con, eid)
+            anagrafica.descrivi(con, eid, attore=g.utente["id"],
+                                descrizione=d.get("descrizione"),
+                                attributi=d.get("attributi"))
+        return esito_ana(f)
+
+    @app.post("/api/anagrafica/entita/<eid>/stato")
+    def api_ana_stato(eid):
+        stato = _json().get("stato")
+        def f(con):
+            _entita_scrivibile(con, eid)
+            if stato == "OBSOLETO":
+                anagrafica.rendi_obsoleta(con, eid, attore=g.utente["id"])
+            elif stato == "ATTIVO":
+                anagrafica.riattiva(con, eid, attore=g.utente["id"])
+            else:
+                raise anagrafica.AnagraficaError("stato: ATTIVO o OBSOLETO")
+        return esito_ana(f)
+
+    @app.post("/api/anagrafica/entita/<eid>/alias")
+    def api_ana_alias(eid):
+        d = _json()
+        def f(con):
+            _entita_scrivibile(con, eid)
+            if d.get("rimuovi"):
+                anagrafica.rimuovi_alias(con, eid, d.get("sistema", ""),
+                                         d.get("codice", ""), attore=g.utente["id"])
+                return None
+            return {"codice": anagrafica.aggiungi_alias(
+                con, eid, d.get("sistema", ""), d.get("codice", ""),
+                attore=g.utente["id"])}
+        return esito_ana(f)
+
+    @app.post("/api/anagrafica/entita/<eid>/fondi")
+    def api_ana_fondi(eid):
+        dest = _json().get("destinazione", "")
+        def f(con):
+            _entita_scrivibile(con, eid)
+            anagrafica.fondi(con, eid, dest, attore=g.utente["id"])
+        return esito_ana(f)
+
+    return auth.inizializza(app, manifest=m_shell,
                             auth_db=auth_db, url_login="/login", core_db=core_db)
 
 
 def main() -> int:
     try:
         app = create_app()
-    except (corecfg.ConfigError, auth.AuthError, migrazioni.MigrazioneError) as e:
+    except (corecfg.ConfigError, auth.AuthError, anagrafica.AnagraficaError,
+            migrazioni.MigrazioneError) as e:
         print(f"[SHELL] avvio negato: {e}", file=sys.stderr)
         return 1
     app.run(host="0.0.0.0", port=app.config["PORTA"])

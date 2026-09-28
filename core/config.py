@@ -78,13 +78,19 @@ porta = 4700               # facoltativo: porta della shell
 
 [auth]
 durata_sessione_ore = 12   # OBBLIGATORIO: dopo quanto scade un login
+
+# Tipi di anagrafica (ADR-002), facoltativi: uno per sezione.
+# [anagrafica.tipi.macchina]
+# descrizione = "Macchine e impianti"
+# normalizzazione = ["strip", "maiuscolo"]
 """
 
 
 def carica_suite(comune: str | Path) -> dict:
     """Legge e valida comune/argo.toml. Fail-fast: la shell non parte senza.
 
-    Ritorna {"titolo", "porta", "durata_sessione_ore"} gia' validati.
+    Ritorna {"titolo", "porta", "durata_sessione_ore", "tipi"} gia' validati;
+    "tipi" = {nome: {"descrizione", "normalizzazione"}} dei tipi di anagrafica.
     """
     p = Path(comune) / NOME_CONFIG_SUITE
     if not p.exists():
@@ -103,7 +109,36 @@ def carica_suite(comune: str | Path) -> dict:
     titolo = optional(cfg, "suite", "titolo", default="ARGO")
     if not isinstance(titolo, str) or not titolo.strip():
         raise ConfigError(f"{p}: [suite] titolo non valido")
-    return {"titolo": titolo, "porta": porta, "durata_sessione_ore": float(durata)}
+    return {"titolo": titolo, "porta": porta, "durata_sessione_ore": float(durata),
+            "tipi": _tipi_anagrafica(p, optional(cfg, "anagrafica", "tipi", default={}))}
+
+
+def _tipi_anagrafica(p: Path, tipi) -> dict:
+    import re
+    from .codes import componi
+    if not isinstance(tipi, dict):
+        raise ConfigError(f"{p}: [anagrafica.tipi] deve contenere tabelle "
+                          f"[anagrafica.tipi.<nome>]")
+    out = {}
+    for nome, d in tipi.items():
+        dove = f"{p}: [anagrafica.tipi.{nome}]"
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", nome):
+            raise ConfigError(f"{dove}: nome di tipo non valido (minuscole, cifre, _)")
+        if not isinstance(d, dict):
+            raise ConfigError(f"{dove} deve essere una tabella")
+        ignote = set(d) - {"descrizione", "normalizzazione"}
+        if ignote:
+            raise ConfigError(f"{dove}: chiavi sconosciute {sorted(ignote)}")
+        descrizione = d.get("descrizione", nome)
+        regole = d.get("normalizzazione", ["strip"])
+        if not isinstance(descrizione, str):
+            raise ConfigError(f"{dove}: descrizione deve essere una stringa")
+        try:
+            componi(regole)
+        except ValueError as e:
+            raise ConfigError(f"{dove}: {e}") from e
+        out[nome] = {"descrizione": descrizione, "normalizzazione": list(regole)}
+    return out
 
 
 def _cammina(cfg: dict, chiavi: tuple, mancante: Any) -> Any:

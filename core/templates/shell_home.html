@@ -33,9 +33,10 @@
   {% endfor %}
 </div>
 
-{% if gestione_utenti %}
-<h2>Amministrazione</h2>
-<p><a href="/utenti">Utenti, gruppi e ruoli →</a></p>
+{% if gestione_utenti or anagrafica %}
+<h2>Suite</h2>
+{% if anagrafica %}<p><a href="/anagrafica">Anagrafica →</a></p>{% endif %}
+{% if gestione_utenti %}<p><a href="/utenti">Utenti, gruppi e ruoli →</a></p>{% endif %}
 {% endif %}
 
 {% if admin %}

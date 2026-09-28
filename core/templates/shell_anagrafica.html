@@ -1,0 +1,181 @@
+{% extends "argo_cornice.html" %}
+{% block titolo %}Anagrafica{% endblock %}
+{% block stile %}
+  table { border-collapse:collapse; width:100%; font-size:14px; margin-top:10px; }
+  th, td { border:1px solid var(--bordo); padding:6px 8px; text-align:left; vertical-align:top; }
+  th { background:var(--card); }
+  tr.riga { cursor:pointer; } tr.riga:hover td { background:var(--card); }
+  form.inline, .barra { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  td button { padding:3px 8px; font-size:13px; }
+  .off { color:var(--muto); }
+  .scheda { border:1px solid var(--bordo); border-radius:10px; padding:16px; margin-top:18px; }
+  .scheda h3 { margin:0 0 6px; font-size:18px; }
+  textarea { background:var(--card); color:var(--testo); border:1px solid var(--bordo);
+             border-radius:7px; padding:8px 10px; font:13px ui-monospace, monospace;
+             width:100%; min-height:70px; }
+{% endblock %}
+{% block contenuto %}
+<h1>Anagrafica</h1>
+<p class="msg" id="msg"></p>
+
+<div class="barra">
+  <select id="sel-tipo"></select>
+  <label class="msg"><input type="checkbox" id="chk-obsoleti"> obsoleti</label>
+  <label class="msg"><input type="checkbox" id="chk-fusi"> fusi</label>
+  <input id="cerca" placeholder="cerca codice o descrizione" style="flex:1;min-width:200px">
+</div>
+<table id="t-entita"></table>
+
+<form class="inline" id="f-crea" hidden>
+  <input id="c-codice" placeholder="codice" required>
+  <input id="c-descrizione" placeholder="descrizione" style="flex:1;min-width:200px">
+  <button class="primario">Crea</button>
+</form>
+
+<div class="scheda" id="scheda" hidden>
+  <h3 id="s-titolo"></h3>
+  <div class="msg" id="s-sotto"></div>
+  <h2>Alias (codici esterni)</h2>
+  <table id="s-alias"></table>
+  <div id="s-azioni" hidden>
+    <form class="inline" id="f-alias">
+      <input id="a-sistema" placeholder="sistema (es. gestionale)" required>
+      <input id="a-codice" placeholder="codice esterno" required>
+      <button>Aggiungi alias</button>
+    </form>
+    <h2>Modifica</h2>
+    <form class="inline" id="f-rinomina">
+      <input id="r-codice" placeholder="nuovo codice" required>
+      <button>Rinomina</button>
+    </form>
+    <form id="f-descrivi" style="margin-top:12px">
+      <input id="d-descrizione" placeholder="descrizione" style="width:100%">
+      <p class="msg">Attributi, uno per riga: <code>chiave = valore</code></p>
+      <textarea id="d-attributi"></textarea>
+      <button style="margin-top:8px">Salva descrizione e attributi</button>
+    </form>
+    <div class="barra">
+      <button id="b-stato"></button>
+      <form class="inline" id="f-fondi" style="margin:0">
+        <input id="f-dest" placeholder="codice dell'entità in cui fondere" required>
+        <button>Fondi</button>
+      </form>
+    </div>
+  </div>
+  <h2>Storico</h2>
+  <table id="s-storico"></table>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+const $ = id => document.getElementById(id);
+const el = (tag, testo, attr) => { const e = document.createElement(tag);
+  if (testo !== undefined) e.textContent = testo; Object.assign(e, attr || {}); return e; };
+function tabella(t, intest, righe, click) {
+  t.replaceChildren();
+  const tr = t.insertRow(); intest.forEach(h => tr.appendChild(el("th", h)));
+  righe.forEach((r, i) => { const row = t.insertRow();
+    if (click) { row.className = "riga"; row.onclick = () => click(i); }
+    r.forEach(v => { const c = row.insertCell();
+      if (v instanceof Node) c.appendChild(v); else c.textContent = v ?? ""; }); });
+}
+function messaggio(ok, testo) { $("msg").textContent = testo; $("msg").className = ok ? "msg" : "msg errore"; }
+async function post(url, dati) {
+  const r = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" },
+                               body: JSON.stringify(dati) });
+  const d = await r.json().catch(() => ({}));
+  messaggio(r.ok, r.ok ? "fatto" : (d.msg || "errore"));
+  if (r.ok) { await elenca(); if (SCELTA) await apri(SCELTA); }
+  return r.ok ? d : null;
+}
+let TIPI = [], ELENCO = [], SCELTA = null;
+const tipo = () => TIPI.find(t => t.tipo === $("sel-tipo").value);
+const attributiTesto = a => Object.entries(a).map(([k, v]) => k + " = " + v).join("\n");
+
+async function carica() {
+  TIPI = (await (await fetch("/api/anagrafica/tipi")).json()).tipi;
+  $("sel-tipo").replaceChildren(...TIPI.map(t => new Option(t.descrizione + " (" + t.tipo + ")", t.tipo)));
+  if (!TIPI.length) messaggio(false, "Nessun tipo configurato: aggiungi [anagrafica.tipi.<nome>] in comune/argo.toml");
+  await elenca();
+}
+async function elenca() {
+  const t = tipo(); if (!t) return;
+  $("f-crea").hidden = !t.modificabile;
+  const stati = ["ATTIVO", ...($("chk-obsoleti").checked ? ["OBSOLETO"] : []),
+                 ...($("chk-fusi").checked ? ["FUSO"] : [])];
+  const d = await (await fetch("/api/anagrafica/entita?tipo=" + encodeURIComponent(t.tipo) +
+                               "&stati=" + stati.join(","))).json();
+  ELENCO = d.entita || [];
+  filtra();
+}
+function filtra() {
+  const q = $("cerca").value.trim().toLowerCase();
+  const righe = ELENCO.filter(e => !q || e.codice.toLowerCase().includes(q) ||
+                                   (e.descrizione || "").toLowerCase().includes(q));
+  tabella($("t-entita"), ["codice", "descrizione", "stato", "attributi"],
+    righe.map(e => [el("span", e.codice, { className: e.stato === "ATTIVO" ? "" : "off" }),
+                    e.descrizione, e.stato, attributiTesto(e.attributi).replaceAll("\n", "; ")]),
+    i => apri(righe[i].id));
+}
+async function apri(id) {
+  SCELTA = id;
+  const d = await (await fetch("/api/anagrafica/entita/" + id)).json();
+  if (!d.ok) return messaggio(false, d.msg);
+  const e = d.entita, t = TIPI.find(x => x.tipo === e.tipo) || {};
+  $("scheda").hidden = false;
+  $("s-titolo").textContent = e.codice + " — " + (e.descrizione || "");
+  $("s-sotto").textContent = e.tipo + " · " + e.stato +
+    (e.stato === "FUSO" ? " · fusa in " + d.codici[e.fusa_in] : "");
+  const puo = t.modificabile && e.stato !== "FUSO";
+  $("s-azioni").hidden = !puo;
+  tabella($("s-alias"), ["sistema", "codice", ""], d.alias.map(a => {
+    const b = el("button", "togli", { hidden: !puo });
+    b.onclick = ev => { ev.stopPropagation();
+      post("/api/anagrafica/entita/" + id + "/alias", { sistema:a.sistema, codice:a.codice, rimuovi:true }); };
+    return [a.sistema, a.codice, b]; }));
+  $("d-descrizione").value = e.descrizione || "";
+  $("d-attributi").value = attributiTesto(e.attributi);
+  $("b-stato").textContent = e.stato === "OBSOLETO" ? "Riattiva" : "Rendi obsoleta";
+  $("b-stato").onclick = () => post("/api/anagrafica/entita/" + id + "/stato",
+                                    { stato: e.stato === "OBSOLETO" ? "ATTIVO" : "OBSOLETO" });
+  tabella($("s-storico"), ["quando (UTC)", "evento", "chi", "dettaglio"], d.storico.map(s => [
+    s.ts_utc.replace("T", " ").slice(0, 19), s.tipo.replace("core.", ""),
+    d.attori[s.attore_id] || s.attore_id,
+    s.fusa_in ? (s.entita_id === id ? "in " + d.codici[s.fusa_in]
+                                    : "ricevuta da " + d.codici[s.entita_id])
+              : [s.codice, s.sistema, s.descrizione].filter(Boolean).join(" · ")]));
+}
+$("sel-tipo").onchange = () => { $("scheda").hidden = true; SCELTA = null; elenca(); };
+$("chk-obsoleti").onchange = elenca; $("chk-fusi").onchange = elenca;
+$("cerca").oninput = filtra;
+$("f-crea").onsubmit = ev => { ev.preventDefault();
+  post("/api/anagrafica/entita", { tipo:tipo().tipo, codice:$("c-codice").value,
+                                   descrizione:$("c-descrizione").value })
+    .then(d => { if (d) { ev.target.reset(); apri(d.id); } }); };
+$("f-alias").onsubmit = ev => { ev.preventDefault();
+  post("/api/anagrafica/entita/" + SCELTA + "/alias",
+       { sistema:$("a-sistema").value, codice:$("a-codice").value }).then(d => d && ev.target.reset()); };
+$("f-rinomina").onsubmit = ev => { ev.preventDefault();
+  post("/api/anagrafica/entita/" + SCELTA + "/rinomina", { codice:$("r-codice").value })
+    .then(d => d && ev.target.reset()); };
+$("f-descrivi").onsubmit = ev => { ev.preventDefault();
+  const attributi = {};
+  for (const riga of $("d-attributi").value.split("\n")) {
+    if (!riga.trim()) continue;
+    const i = riga.indexOf("=");
+    if (i < 0) return messaggio(false, "riga senza '=': " + riga);
+    attributi[riga.slice(0, i).trim()] = riga.slice(i + 1).trim();
+  }
+  post("/api/anagrafica/entita/" + SCELTA + "/descrivi",
+       { descrizione:$("d-descrizione").value, attributi }); };
+$("f-fondi").onsubmit = async ev => { ev.preventDefault();
+  const r = await (await fetch("/api/anagrafica/risolvi?tipo=" + encodeURIComponent(tipo().tipo) +
+                               "&codice=" + encodeURIComponent($("f-dest").value))).json();
+  if (!r.ok || !r.risoluzione) return messaggio(false, r.msg || "codice di destinazione non trovato");
+  if (!confirm("Fondere definitivamente in " + r.risoluzione.codice + "?")) return;
+  post("/api/anagrafica/entita/" + SCELTA + "/fondi", { destinazione:r.risoluzione.id })
+    .then(d => d && ev.target.reset()); };
+carica();
+</script>
+{% endblock %}

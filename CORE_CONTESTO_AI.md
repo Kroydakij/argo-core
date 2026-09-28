@@ -50,7 +50,9 @@ chiedi: quasi sempre esiste una via stdlib o un helper di core.
    leggono con `core.db.readonly()` (URI `mode=ro`: l'immutabilità la impone il
    motore SQLite, non la disciplina). Un modulo che ha bisogno di dati propri
    crea il **suo** database nella cartella dati; non scrive MAI su database di
-   cui non è proprietario.
+   cui non è proprietario. I DB del kernel (`core.sqlite`, `auth.sqlite`,
+   `anagrafica.sqlite`) li scrive solo la shell; l'anagrafica si modifica da un
+   modulo con `anagrafica.client` (HTTP verso la shell, come l'utente).
 2. **I dati vivono fuori dalla cartella del modulo**, nella cartella dati
    comune (variabile d'ambiente `ARGO_COMUNE`). I rilasci (zip del codice) non
    contengono **mai** la cartella dati: estrarre un aggiornamento sopra
@@ -90,9 +92,13 @@ chiedi: quasi sempre esiste una via stdlib o un helper di core.
 10. **Pannelli admin read-only**: l'ispezione dei dati passa da
     `core.adminbrowser` (connessioni `mode=ro`) + export CSV. La modifica
     manuale di log e contatori corrompe i KPI in modo silenzioso.
-11. **Normalizzazione dei codici in un unico punto**: ogni famiglia di codici
-    identificativi ha UNA regola registrata con `core.codes`; import, API e UI
-    passano tutti da `codes.norm()`.
+11. **Entità condivise in anagrafica, codici normalizzati in un unico punto**:
+    ciò che un secondo modulo potrebbe dover nominare (macchine, articoli,
+    attrezzi, commesse...) è un'entità di `core.anagrafica`, e nei DB dei
+    moduli si riferisce per **ID** (`entita_id`), mai per codice. Il codice
+    si risolve con `anagrafica.risolvi()` (normalizzazione del tipo, da
+    `argo.toml`). Le famiglie di codici private di un modulo usano
+    `core.codes` (`codes.registra()` + `codes.norm()`).
 12. **Niente logiche di dominio in `core/`**: il core contiene solo pattern
     generici. Il dominio (quali entità, quali stati, quali turni, quali
     cadenze) vive nella **config TOML del modulo** e nel codice del modulo.
@@ -105,7 +111,8 @@ chiedi: quasi sempre esiste una via stdlib o un helper di core.
 ```
 <root della suite>\
 ├── comune\              ← cartella dati (ARGO_COMUNE): TUTTI i DB live, argo.toml,
-│                          core.sqlite (registro), auth.sqlite (utenti), _backup\.
+│                          core.sqlite (registro), auth.sqlite (utenti),
+│                          anagrafica.sqlite (entità condivise), _backup\.
 │                          MAI nei rilasci. Backup = copia di questa cartella.
 ├── core\                ← argo-core (si aggiorna sovrascrivendo la cartella)
 ├── modulo_a\            ← un modulo = una cartella sorella di core\
@@ -183,6 +190,10 @@ owned(path, *, wal=True, fk=True, timeout_ms=BUSY_TIMEOUT_MS) -> sqlite3.Connect
 readonly(path, *, timeout_ms=BUSY_TIMEOUT_MS) -> sqlite3.Connection
     # DB di un ALTRO modulo, URI mode=ro: le scritture falliscono nel motore.
     # Solleva sqlite3.OperationalError se il file non esiste (non lo crea).
+
+attach_readonly(con, path, alias) -> None
+    # collega a `con` un DB altrui in mode=ro come schema `alias` (JOIN,
+    # es. con l'anagrafica). Scrivere su alias.* fallisce nel motore.
 ```
 
 ### core.migrate — migrazioni additive
@@ -275,6 +286,54 @@ load(path) -> dict                           # file mancante/malformato -> Confi
 require(cfg, *chiavi) -> Any                 # chiave annidata OBBLIGATORIA -> ConfigError se assente
 optional(cfg, *chiavi, default=None) -> Any  # opzionale, default ESPLICITO del chiamante
 ```
+
+### core.anagrafica — entità condivise (kernel, ADR-002)
+
+```python
+# LETTURA (moduli): sola lettura su comune/anagrafica.sqlite
+apri(comune) -> Connection            # readonly; fail-fast se manca ("avvia la shell")
+percorso_db(comune) -> Path           # per db.attach_readonly(con, ..., "ana")
+risolvi(con, tipo, codice, *, sistema=None) -> Risoluzione | None
+    # codice in qualunque forma -> .id canonico, .come (CORRENTE|ALIAS|STORICO),
+    # .codice corrente. Ordine: codice corrente, alias, codici storici.
+entita(con, id) -> dict | None        # id, tipo, codice, descrizione, stato,
+                                      # fusa_in, attributi (dict), creata_il_utc
+elenco(con, tipo, *, stati=("ATTIVO",)) -> list[dict]
+canonico(con, id) -> str              # segue le fusioni (ID nei log vecchi)
+alias(con, id) / storico(con, id) -> list[dict]
+normalizza(con, tipo, codice) -> str
+
+# SCRITTURA (moduli): via shell, come l'utente della richiesta, permesso
+# core.anagrafica.modifica.<tipo>. Errori: AnagraficaError, PermissionError.
+anagrafica.client.crea(tipo=, codice=, descrizione="", attributi=None) -> id
+anagrafica.client.rinomina(id, codice) / descrivi(id, descrizione=, attributi=)
+anagrafica.client.rendi_obsoleta(id) / riattiva(id)
+anagrafica.client.aggiungi_alias(id, sistema, codice) / rimuovi_alias(...)
+anagrafica.client.fondi(sorgente, destinazione)
+```
+
+Stati: `ATTIVO`, `OBSOLETO`, `FUSO` (definitivo). Un codice non si riusa
+finché un'entità del tipo, anche obsoleta o fusa, lo porta: si rinomina prima
+quella. Gli **attributi** sono un oggetto piatto di scalari che *descrive*
+(reparto, marca): tutto ciò che ha regole, storico o relazioni sta nel DB del
+modulo con chiave = ID anagrafica (niente EAV). Le **fusioni non riscrivono i
+log**: chi aggrega per entità canonicalizza in lettura (`canonico()` o la
+vista `anagrafica_canonico(id, id_canonico)` via `attach_readonly`).
+
+I tipi sono dati d'installazione, in `comune/argo.toml`; il modulo dichiara
+nel manifest quelli che usa (`[anagrafica] tipi`), e `auth.inizializza()`
+nega l'avvio se uno manca:
+
+```toml
+[anagrafica.tipi.articolo]
+descrizione = "Articoli di magazzino"
+normalizzazione = ["strip", "zfill:9"]   # strip, maiuscolo, minuscolo,
+                                         # senza_spazi, zfill:N
+```
+
+Import iniziale (CLI del kernel, CSV `;` con intestazione `codice;descrizione;...`,
+colonne in più = attributi, idempotente):
+`python -m core.anagrafica importa --tipo articolo articoli.csv [--come <username>]`
 
 ### core.busta — la busta standard degli eventi (kernel, ADR-005)
 
@@ -489,6 +548,9 @@ RETTIFICA_MENO = "-"
 registra(nome, fn) -> None                   # una regola per famiglia, una volta
 norm(nome, valore) -> str                    # famiglia non registrata -> KeyError
 zfill_numerico(cifre) -> Callable[[str], str]   # factory zero-padding a N cifre
+componi(regole: list[str]) -> Callable[[str], str]
+    # regole dichiarative (strip, maiuscolo, minuscolo, senza_spazi, zfill:N):
+    # le usa l'anagrafica per i tipi condivisi; regola ignota -> ValueError
 ```
 
 ### core.notify — email SMTP
@@ -526,7 +588,10 @@ Login unico (cookie `argo_sessione`, vale per tutti i moduli sullo stesso
 host), logout, "cambia password", home con i moduli che l'utente può usare,
 amministrazione utenti/gruppi/ruoli (`/utenti`, permesso `core.utenti`),
 registro moduli + health-check + browser DB read-only (permesso
-`core.admin`). Unico scrittore di `core.sqlite` e `auth.sqlite`.
+`core.admin`), anagrafica (`/anagrafica`: consultazione per tutti, scrittura
+con `core.anagrafica.modifica.<tipo>`; API `/api/anagrafica/...` usate da
+`anagrafica.client`). Unico scrittore di `core.sqlite`, `auth.sqlite` e
+`anagrafica.sqlite`.
 
 Config obbligatoria `comune/argo.toml` (fail-fast, `core.config.carica_suite`):
 
@@ -536,6 +601,9 @@ titolo = "ARGO"            # facoltativo
 porta = 4700               # facoltativo
 [auth]
 durata_sessione_ore = 12   # obbligatorio
+[anagrafica.tipi.macchina] # facoltativo, uno per tipo di anagrafica
+descrizione = "Macchine e impianti"
+normalizzazione = ["strip", "maiuscolo"]
 ```
 
 **Cornice comune**: i template di un modulo inizializzato con
@@ -632,6 +700,10 @@ soddisfatta, il modulo non è pronto.
 - [ ] I log/eventi sono append-only e scritti **solo** con `busta.scrivi()`
       (o `events.registra()`), con tipo dichiarato nel manifest e attore =
       utente della sessione? Nessun campo "operatore" digitato a mano?
+- [ ] Le entità che altri moduli potrebbero nominare stanno in
+      `core.anagrafica` e nel DB del modulo compaiono solo come `entita_id`?
+      I codici digitati passano da `anagrafica.risolvi()`? Nessuna tabella
+      "anagrafica" privata di oggetti condivisi?
 - [ ] Lo stato con ciclo di vita è una **proiezione** dello storico, non un
       campo aggiornato?
 - [ ] Le transizioni di stato passano da una `StateMachine` dichiarata in

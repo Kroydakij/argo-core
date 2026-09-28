@@ -259,7 +259,8 @@ def verifica_tipi(m: Manifest, tipi_disponibili) -> None:
     mancanti = sorted(set(m.tipi_anagrafica) - set(tipi_disponibili))
     if mancanti:
         raise ManifestError(f"{m.nome}: tipi di anagrafica non configurati "
-                            f"nell'installazione: {', '.join(mancanti)}")
+                            f"nell'installazione: {', '.join(mancanti)}. Aggiungi "
+                            f"[anagrafica.tipi.<nome>] in comune/argo.toml")
 
 
 def scansiona(radice: str | Path, *, versione_core: str | None = None) -> list[Scansione]:

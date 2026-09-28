@@ -1,6 +1,6 @@
 # ADR-002 — Anagrafica codici centralizzata
 
-- **Stato**: Accettato (2026-09-28)
+- **Stato**: Accettato (2026-09-28) — parte 1 (kernel) implementata in `core/anagrafica.py`
 - **Data**: 2026-09-27
 - **Riguarda**: nuovo `core.anagrafica`, `core.codes`, `core.inventory`, chiave entità di `core.events`
 - **Rompe l'API**: sì (vedi *Rotture API*)
@@ -215,3 +215,39 @@ anagrafica.elenco(con_ro, tipo, *, stati=("ATTIVO",)) -> list[dict]
 - Riuso di un codice obsoleto: **vietato** finché un'entità, anche
   obsoleta, lo porta. Per liberarlo si rinomina prima quella vecchia
   (evento esplicito, tracciato).
+
+### Note di implementazione (parte 1: kernel)
+
+L'ADR si implementa in due PR, come ADR-001: questa porta il kernel
+(`core.anagrafica`, API e pagina nella shell, CLI, regole di `core.codes`,
+`db.attach_readonly`, permessi per tipo); la seconda porta `core.inventory` e
+l'esempio `presenze` sugli ID di anagrafica.
+
+- **Tipi anche nel log.** Le regole di normalizzazione servono anche ai
+  lettori (`risolvi()` da un modulo): all'avvio la shell registra in
+  `anagrafica.sqlite` i tipi di `argo.toml` nuovi o cambiati (evento
+  `core.tipo_configurato`, vista `anagrafica_tipi`). Così il DB basta a sé
+  stesso e i cambi di configurazione hanno un audit trail. Un tipo registrato
+  che sparisce da `argo.toml` nega l'avvio della shell. Cambiare la
+  normalizzazione non riscrive i codici esistenti (si rinominano).
+- **Normalizzazione di default** di un tipo senza la chiave: `["strip"]`.
+- **Codici delle entità fuse restano riservati** (oltre a quelli delle
+  obsolete): continuano a risolvere sulla destinazione, riusarli creerebbe
+  ambiguità.
+- **Alias senza `sistema`**: `risolvi()` cerca fra gli alias di tutti i
+  sistemi; se due entità diverse portano lo stesso codice esterno, errore
+  esplicito (serve `sistema=`), mai una scelta silenziosa.
+- **Codici storici** riusati da un'altra entità: vince la più recente.
+- **Client**: `anagrafica.client.crea(tipo=..., ...)` senza `request` fra gli
+  argomenti: usa la richiesta Flask corrente (cookie `argo_sessione`, o Basic
+  Auth per gli utenti `servizio`) e la porta della shell letta da
+  `argo.toml` da `auth.inizializza()`. Errori della shell: `AnagraficaError`,
+  oppure `PermissionError` per 401/403.
+- **`db.owned()` apre con URI** (`mode=rwc`): firma invariata, serve per
+  `attach_readonly()`.
+- **ID canonico in scrittura** (sezione 5): la busta non consulta
+  l'anagrafica; i moduli scrivono l'ID che ottengono da `risolvi()`, già
+  canonico. Parte 2.
+- **Prestazioni** (viste sul log, 20.000 entità): `risolvi()` ~0,1 ms,
+  `elenco()` ~0,2 s, vista `anagrafica_canonico` ~40 ms. Import ~1 ms per
+  entità (una transazione ciascuna).

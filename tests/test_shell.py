@@ -37,7 +37,7 @@ class TestConfigSuite(unittest.TestCase):
         self._scrivi(ARGO_TOML)
         self.assertEqual(config.carica_suite(self.comune),
                          {"titolo": "Stabilimento", "porta": 4700,
-                          "durata_sessione_ore": 8.0})
+                          "durata_sessione_ore": 8.0, "tipi": {}})
 
     def test_mancante_o_invalida(self):
         with self.assertRaises(config.ConfigError) as ctx:

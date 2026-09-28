@@ -89,6 +89,9 @@ class TestDemoPresenze(unittest.TestCase):
     def test_http_con_login_della_suite(self):
         from core import auth, db
         auth_db = Path(self.tmp.name) / "auth.sqlite"
+        (Path(self.tmp.name) / "argo.toml").write_text(
+            "[auth]\ndurata_sessione_ore = 8\n[anagrafica.tipi.attrezzo]\n",
+            encoding="utf-8")
         admin = auth.crea_admin(auth_db, "admin", "pw")
         con = db.owned(auth_db)
         vede = auth.definisci_ruolo(con, "Vede", ["presenze.vedi"], attore=admin)

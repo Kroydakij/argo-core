@@ -91,7 +91,8 @@ PORTA_SHELL = 4700
 
 TIPI_UTENTE = ("persona", "servizio")
 
-#: permessi del kernel (i permessi di anagrafica per tipo arrivano con ADR-002).
+#: permessi fissi del kernel. In piu', uno per tipo di anagrafica configurato:
+#: core.anagrafica.modifica.<tipo> (ADR-002, vedi core.anagrafica.permessi).
 PERMESSI_KERNEL = {
     "core.admin": "Amministrazione della suite (registro moduli, browser DB)",
     "core.utenti": "Gestione di utenti, gruppi e ruoli",
@@ -670,7 +671,7 @@ def inizializza(app, *, manifest, auth_db: str | Path, url_login: str | None = N
 
     from . import registro
     from .config import NOME_CONFIG_SUITE, ConfigError, carica_suite
-    from .manifest import ManifestError
+    from .manifest import ManifestError, verifica_tipi
 
     non_dichiarati = sorted({
         f"{ep}: {v._argo_permesso}" for ep, v in app.view_functions.items()
@@ -688,19 +689,22 @@ def inizializza(app, *, manifest, auth_db: str | Path, url_login: str | None = N
 
     core_db = Path(core_db) if core_db else auth_db.parent / "core.sqlite"
     # titolo e porta della shell: da comune/argo.toml se c'e', se no default
-    titolo_suite, porta_shell = "ARGO", PORTA_SHELL
+    titolo_suite, porta_shell, tipi = "ARGO", PORTA_SHELL, {}
     if (auth_db.parent / NOME_CONFIG_SUITE).exists():
         try:
             suite = carica_suite(auth_db.parent)
             titolo_suite, porta_shell = suite["titolo"], suite["porta"]
+            tipi = suite["tipi"]
         except ConfigError as e:
             raise AuthError(f"config di suite non valida: {e}") from e
+    # i tipi di anagrafica usati dal modulo devono esistere (ADR-002)
+    verifica_tipi(manifest, tipi)
 
     # la sessione Flask del modulo non deve pestare quella di altri moduli
     # sullo stesso host (i cookie non distinguono le porte)
     app.config["SESSION_COOKIE_NAME"] = f"argo_{manifest.nome}"
     app.extensions["argo_auth"] = {"manifest": manifest, "auth_db": auth_db,
-                                   "core_db": core_db}
+                                   "core_db": core_db, "porta_shell": porta_shell}
     # la cornice comune sta in core/templates; i template del modulo vincono
     app.jinja_loader = ChoiceLoader([
         app.jinja_loader, FileSystemLoader(str(Path(__file__).parent / "templates"))])
