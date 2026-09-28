@@ -1,6 +1,6 @@
 # ADR-000 — Kernel vs utility
 
-- **Stato**: Accettato (2026-09-28)
+- **Stato**: Accettato (2026-09-28) — implementato in 1.0.0 (`core.KERNEL`/`core.UTILITY`, `tests/test_architettura.py`)
 - **Data**: 2026-09-27
 - **Riguarda**: struttura di `core/`, definizione di "modulo conforme", politica di stabilità 1.0
 

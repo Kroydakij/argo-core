@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import busta, events, manifest  # noqa: E402
 
 M = manifest.da_dict({
-    "modulo": {"nome": "impianto", "versione": "1.0.0", "core": ">=0.4", "titolo": "I"},
+    "modulo": {"nome": "impianto", "versione": "1.0.0", "core": ">=1.0", "titolo": "I"},
     "anagrafica": {"tipi": ["macchina"]},
     "eventi": [{"tipo": "impianto.cambio_stato", "versione": 1, "entita": "macchina",
                 "descrizione": "cambio stato"}],

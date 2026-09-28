@@ -441,7 +441,7 @@ class TestClientHTTP(TestShellAnagrafica):
     def _modulo(self):
         from flask import Flask, jsonify, request
         m = manifest.da_dict({
-            "modulo": {"nome": "magazzino", "versione": "1.0.0", "core": ">=0.4",
+            "modulo": {"nome": "magazzino", "versione": "1.0.0", "core": ">=1.0",
                        "titolo": "Magazzino"},
             "permessi": [{"id": "magazzino.vedi", "descrizione": "vedere"}],
             "anagrafica": {"tipi": ["articolo"]}})
@@ -483,7 +483,7 @@ class TestClientHTTP(TestShellAnagrafica):
     def test_modulo_con_tipo_non_configurato_non_parte(self):
         from flask import Flask
         m = manifest.da_dict({
-            "modulo": {"nome": "officina", "versione": "1.0.0", "core": ">=0.4",
+            "modulo": {"nome": "officina", "versione": "1.0.0", "core": ">=1.0",
                        "titolo": "Officina"},
             "anagrafica": {"tipi": ["commessa"]}})
         with self.assertRaises(manifest.ManifestError) as ctx:

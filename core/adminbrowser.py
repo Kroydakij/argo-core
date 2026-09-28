@@ -27,7 +27,7 @@ from flask import Blueprint, abort, jsonify, request
 
 from . import db as coredb
 from .export import csv_response
-from .migrate import _ident
+from .migrate import ident
 
 RIGHE_PER_PAGINA = 50
 
@@ -68,7 +68,7 @@ def blueprint(dbs: dict | Callable[[], dict], auth: Callable | None = None,
                     "SELECT name, type FROM sqlite_master "
                     "WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' "
                     "ORDER BY type, name"):
-                n = con.execute(f"SELECT COUNT(*) FROM {_ident(r['name'])}").fetchone()[0]
+                n = con.execute(f"SELECT COUNT(*) FROM {ident(r['name'])}").fetchone()[0]
                 out.append({"nome": r["name"], "tipo": r["type"], "righe": n})
             return jsonify(out)
         finally:
@@ -83,7 +83,7 @@ def blueprint(dbs: dict | Callable[[], dict], auth: Callable | None = None,
                 abort(404, "tabella inesistente")
             off = max(0, request.args.get("offset", 0, type=int))
             rows = con.execute(
-                f"SELECT * FROM {_ident(tab)} ORDER BY rowid DESC LIMIT ? OFFSET ?",
+                f"SELECT * FROM {ident(tab)} ORDER BY rowid DESC LIMIT ? OFFSET ?",
                 (RIGHE_PER_PAGINA, off)).fetchall()
             return jsonify({"colonne": list(rows[0].keys()) if rows else [],
                             "righe": [list(r) for r in rows], "offset": off})
@@ -97,7 +97,7 @@ def blueprint(dbs: dict | Callable[[], dict], auth: Callable | None = None,
         try:
             if not _tabella_esiste(con, tab):
                 abort(404, "tabella inesistente")
-            rows = con.execute(f"SELECT * FROM {_ident(tab)}").fetchall()
+            rows = con.execute(f"SELECT * FROM {ident(tab)}").fetchall()
             return csv_response(rows, f"{alias}_{tab}")
         finally:
             con.close()

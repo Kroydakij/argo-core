@@ -13,7 +13,7 @@ CAUSALI = {"CARICO": "+", "CONSUMO": "-", "RETTIFICA_PIU": "+", "RETTIFICA_MENO"
 TIPI = {"articolo": {"descrizione": "Articoli", "normalizzazione": ["strip", "zfill:9"]},
         "macchina": {"descrizione": "Macchine", "normalizzazione": ["strip"]}}
 M = manifest.da_dict({
-    "modulo": {"nome": "magazzino", "versione": "1.0.0", "core": ">=0.4", "titolo": "M"},
+    "modulo": {"nome": "magazzino", "versione": "1.0.0", "core": ">=1.0", "titolo": "M"},
     "anagrafica": {"tipi": ["articolo"]},
     "eventi": [{"tipo": "magazzino.movimento", "versione": 1, "entita": "articolo",
                 "descrizione": "movimento"},

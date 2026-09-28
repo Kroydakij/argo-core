@@ -23,7 +23,7 @@ import sqlite3
 
 def table_columns(con: sqlite3.Connection, table: str) -> set[str]:
     """Nomi delle colonne esistenti di una tabella (vuoto se non esiste)."""
-    return {r[1] for r in con.execute(f"PRAGMA table_info({_ident(table)})")}
+    return {r[1] for r in con.execute(f"PRAGMA table_info({ident(table)})")}
 
 
 def table_exists(con: sqlite3.Connection, table: str) -> bool:
@@ -53,7 +53,7 @@ def ensure_column(con: sqlite3.Connection, table: str, column: str,
     """
     if column in table_columns(con, table):
         return False
-    con.execute(f"ALTER TABLE {_ident(table)} ADD COLUMN {_ident(column)} {ddl_type}")
+    con.execute(f"ALTER TABLE {ident(table)} ADD COLUMN {ident(column)} {ddl_type}")
     return True
 
 
@@ -66,7 +66,7 @@ def rebuild_views(con: sqlite3.Connection, views: dict[str, str]) -> None:
     avvio rende il codice l'unica fonte di verita' della loro definizione.
     """
     for name, ddl in views.items():
-        con.execute(f"DROP VIEW IF EXISTS {_ident(name)}")
+        con.execute(f"DROP VIEW IF EXISTS {ident(name)}")
         con.execute(ddl)
 
 
@@ -81,5 +81,9 @@ def ident(name: str) -> str:
     return f'"{name}"'
 
 
-#: nome storico (0.x), usato internamente da core; per il codice nuovo: ident().
-_ident = ident
+def _ident(name: str) -> str:
+    """Nome 0.x di ident(): deprecato dalla 1.0, sparisce nella 2.0."""
+    import warnings
+    warnings.warn("migrate._ident e' deprecato: usa migrate.ident",
+                  DeprecationWarning, stacklevel=2)
+    return ident(name)

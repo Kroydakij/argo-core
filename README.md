@@ -4,20 +4,30 @@ Fondamenta per suite gestionali **Flask + SQLite** che girano su un PC
 qualunque: Windows senza diritti admin, niente Docker, niente server,
 niente cloud. Serving HTTP in LAN, backup = copia di una cartella.
 
-**Fase 1** (questa release): libreria + portale. Nessun processo, nessuna
-dipendenza obbligatoria oltre la libreria standard — Flask serve solo a
-`export.csv_response` ed è importato lazy.
+**1.0**: il **kernel** della suite (login unico con permessi per modulo,
+anagrafica centralizzata, manifest dei moduli, migrazioni con backup, busta
+standard degli eventi) più le utility opzionali. Zero dipendenze oltre la
+libreria standard; Flask serve dove si serve web ed è importato lazy.
+Da 0.4: [`docs/MIGRAZIONE-1.0.md`](docs/MIGRAZIONE-1.0.md). Decisioni
+architetturali: [`docs/adr/`](docs/adr/).
 
 ## Cosa contiene
 
+**Kernel** — ciò che deve dare la stessa risposta a tutti i moduli (ADR-000):
+
 | Modulo | Cosa rende automatico |
 |---|---|
-| `core.db` | Connessioni uniformi: `owned()` (WAL, FK, busy_timeout unico) e `readonly()` (sola lettura imposta dal motore, `mode=ro`) |
-| `core.migrate` | Migrazioni solo additive: `ensure_table` (pretende `IF NOT EXISTS`), `ensure_column` idempotente, `rebuild_views` da chiamare sempre alla fine |
-| `core.codes` | Registro delle normalizzazioni codici: una regola per famiglia, registrata una volta, usata ovunque |
-| `core.notify` | Email via relay SMTP interno, mai solleva, log append-only opzionale nel DB del modulo mittente |
-| `core.schedule` | Scheduler "a tempo di lettura": stato ok/da_fare/scaduta calcolato dallo storico, per attività a cadenza o a evento. Funzione pura, zero SQL |
-| `core.export` | CSV per Excel in locale italiano (`;` + BOM utf-8) |
+| `core.shell` | Il processo della suite (porta 4700): login unico, menu per permessi, utenti/gruppi/ruoli, anagrafica, registro dei moduli |
+| `core.auth` | Identità centrale e sessione condivisa; `richiede_permesso("modulo.azione")` nei moduli (ADR-001) |
+| `core.anagrafica` | Entità condivise con ID stabile, codici normalizzati, alias, rinomine e fusioni come eventi (ADR-002) |
+| `core.manifest` | Cosa un modulo è e usa (permessi, menu, tipi, eventi), validato all'avvio (ADR-003) |
+| `core.migrazioni` | Schema a passi numerati, backup verificato prima di migrare (ADR-004) |
+| `core.busta` + `core.events` | Ogni evento con chi, quando (UTC + ora locale), cosa, su quale entità (ADR-005) |
+| `core.db`, `core.migrate`, `core.config`, `core.codes` | Connessioni uniformi (`owned`/`readonly`/`attach_readonly`), helper additivi, TOML fail-fast, normalizzazione codici |
+
+**Utility** — opzionali, si importano per nome (`from core import board`):
+`statemachine`, `shifts`, `schedule`, `forms`, `board`, `inventory`,
+`export`, `notify`, `adminbrowser`, `scaffold`.
 
 ## Uso senza installazione
 
@@ -37,7 +47,8 @@ from core import db, migrate, export
 python -m unittest discover tests -v
 ```
 
-Solo stdlib: la suite gira su un Python 3.12+ appena installato.
+Solo stdlib: la suite gira su un Python 3.11+ appena installato (i test
+che richiedono Flask si saltano se manca).
 
 ## Regole del progetto
 
@@ -80,26 +91,9 @@ anche la config di suite `argo.toml` (obbligatoria: vedi
 core. Se la shell e' spenta, chi ha gia' fatto login continua a lavorare
 nei moduli, ma nessuno puo' entrare.
 
-## Fase 2 (0.3.0)
-
-Layer applicativo event-sourced, tutto stdlib (Flask/Werkzeug lazy dove serve):
-
-- `core.config` — configurazione TOML fail-fast
-- `core.events` — log append-only + proiezione `latest_state_per_entity`
-- `core.statemachine` — transizioni dichiarative
-- `core.shifts` — turni parametrici a tempo di lettura
-- `core.forms` — form-engine dichiarativo (validazione + render)
-- `core.auth` — identità centrale della suite: utenti, gruppi, ruoli e
-  sessione condivisa tra i moduli (ADR-001)
-- `core.board` — board config-driven
-- `core.anagrafica` — entità condivise della suite: ID stabile, codici,
-  alias, fusioni, tutto come eventi (ADR-002)
-- `core.inventory` — inventario generico event-sourced (articoli in
-  anagrafica + movimenti append-only + giacenze come proiezione)
-- `core.scaffold` — `python -m core.scaffold <nome>`, con demo in `examples/`
-
-Vedi `CHANGELOG.md` per il dettaglio.
-
 ## Roadmap
 
-- consolidamento dell'API di `core.*` verso la 1.0
+- 1.x: notifiche nel kernel, sopra la busta degli eventi.
+- Approvazioni multi-step: modulo separato, mai nel core.
+
+Vedi `CHANGELOG.md` per il dettaglio delle versioni.

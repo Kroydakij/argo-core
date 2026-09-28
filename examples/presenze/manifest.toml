@@ -4,8 +4,8 @@
 
 [modulo]
 nome = "presenze"
-versione = "0.4.0"
-core = ">=0.4,<1.0"
+versione = "1.0.0"
+core = ">=1.0,<2.0"
 titolo = "Presenze attrezzatura"
 descrizione = "Ciclo di vita degli attrezzi: disponibile, in uso, in manutenzione"
 
