@@ -55,11 +55,13 @@ chiedi: quasi sempre esiste una via stdlib o un helper di core.
    comune (variabile d'ambiente `ARGO_COMUNE`). I rilasci (zip del codice) non
    contengono **mai** la cartella dati: estrarre un aggiornamento sopra
    un'installazione non deve poter distruggere i dati.
-3. **Log append-only con single write-point**: le tabelle di log/eventi non si
+3. **Log append-only con la busta standard**: le tabelle di log/eventi non si
    aggiornano né si cancellano, si inseriscono solo righe, e ogni scrittura
-   passa da UNA sola funzione (con `core.events` è `events.registra()`). Le
-   righe hanno un campo `sorgente` (`MANUALE`/`SENSORE`) per distinguere il
-   dato inserito a mano da quello letto da un'automazione.
+   passa da `core.busta.scrivi()` (direttamente o via `events.registra()`).
+   Ogni riga ha la **busta** (ADR-005): `uid`, `tipo` dichiarato nel manifest,
+   `versione`, `ts_utc` + `offset_min`, `attore_id` (ID utente della sessione,
+   mai un nome scritto a mano), `entita_id`, `sorgente` (`MANUALE`/`SENSORE`).
+   I dati di dominio sono colonne tipizzate accanto alla busta, mai un JSON.
 4. **Migrazioni solo additive, numerate, con backup**: lo schema si evolve
    con una lista di passi numerati (`PASSI = [migrazioni.Passo(1, ...), ...]`)
    applicata all'avvio da `core.migrazioni.applica()`, che fa il backup del DB
@@ -274,28 +276,47 @@ require(cfg, *chiavi) -> Any                 # chiave annidata OBBLIGATORIA -> C
 optional(cfg, *chiavi, default=None) -> Any  # opzionale, default ESPLICITO del chiamante
 ```
 
-### core.events — stato event-sourced
+### core.busta — la busta standard degli eventi (kernel, ADR-005)
 
 ```python
-SORGENTI = ("MANUALE", "SENSORE")
+SORGENTI = ("MANUALE", "SENSORE"); SISTEMA = "sistema"
+crea_log(con, tabella, colonne_dominio: dict[str, str] | None = None)
+    # CREATE TABLE IF NOT EXISTS con busta + dominio + indici; su un log 0.x
+    # aggiunge la busta (colonne nullable, righe vecchie intatte). In un Passo.
+scrivi(con, tabella, *, tipo, manifest, entita_id=None, attore_id=None,
+       sorgente="MANUALE", dati: dict | None = None, ora=None) -> int
+    # SINGLE WRITE-POINT: tipo dichiarato nel manifest (versione da li');
+    # entita_id obbligatorio se il tipo ha un'entita', vietato se no;
+    # attore dalla sessione Flask o esplicito (busta.SISTEMA): mai dedotto.
+ora_locale(riga) -> datetime     # ora "dell'orologio a muro" (UTC + offset)
+e_legacy(riga) -> bool           # riga 0.x senza busta
+```
+
+Colonne della busta: `id, uid, tipo, versione, ts_utc, offset_min, attore_id,
+entita_id, sorgente`. L'ordine nel log è per `id`. Per turni e date usa
+`ora_locale(riga)`, mai il testo di `ts_utc`.
+
+### core.events — log di stati sulla busta
+
+```python
 TABELLA_DEFAULT = "eventi"; VISTA_DEFAULT = "latest_state_per_entity"
 
 migra(con, table=TABELLA_DEFAULT, vista=VISTA_DEFAULT, *,
       extra_colonne: dict[str, str] | None = None) -> None
-    # crea log append-only + vista di proiezione; colonne extra additive
+    # log (busta + stato + note + extra) + vista di proiezione; in un Passo
 
-registra(con, entita, stato, *, table=..., sorgente="MANUALE",
-         operatore=None, note=None, extra: dict | None = None) -> int
-    # SINGLE WRITE-POINT: l'unica scrittura ammessa sul log (solo INSERT)
+registra(con, tipo, entita_id, stato, *, manifest, table=..., sorgente="MANUALE",
+         attore_id=None, note=None, extra: dict | None = None) -> int
+    # busta.scrivi(): UN tipo per log, dichiarato nel manifest
 
-stato_corrente(con, entita=None, *, vista=...) -> list[dict] | dict | None
-    # None -> tutti gli stati correnti; "X" -> stato di X o None se mai vista
-
-storico(con, entita, *, table=...) -> list[dict]   # cronologia completa
+stato_corrente(con, entita_id=None, *, vista=...) -> list[dict] | dict | None
+storico(con, entita_id, *, table=...) -> list[dict]   # cronologia completa
 ```
 
-Colonne standard del log: `id, ts, entita, stato, sorgente, operatore, note`.
-La proiezione è "evento con id massimo per entità" (id monotono).
+La proiezione è "evento con id massimo per entità" (id monotono). Ogni riga
+restituita ha anche `entita` (la chiave), comoda per `core.board`. Sui log
+0.x la chiave è il vecchio codice per le righe vecchie e `entita_id` per le
+nuove; `operatore=` è deprecato (finisce in `note`).
 
 ### core.statemachine — transizioni dichiarative (puro)
 
@@ -314,7 +335,7 @@ StateMachine.da_config(sezione) -> StateMachine   # {iniziale, transizioni} da T
 ```
 
 Pattern tipico: `nuovo = sm.transita(corrente, azione)` **poi**
-`events.registra(con, entita, nuovo, ...)` — il log non registra mai un
+`events.registra(con, tipo, entita_id, nuovo, manifest=M)` — il log non registra mai un
 movimento impossibile.
 
 ### core.shifts — turni parametrici (puro)
@@ -561,7 +582,7 @@ def migrate_db():
 
 # 3. scrittura: valida la transizione, POI appendi l'evento (single write-point)
 nuovo = sm.transita(stato_corrente, azione)          # TransizioneNonValida se vietata
-events.registra(con, entita, nuovo, operatore=op)
+events.registra(con, "mio.cambio_stato", entita_id, nuovo, manifest=M)  # attore = sessione
 
 # 4. lettura: proiezioni e regole a tempo di lettura
 board.render_html(events.stato_corrente(con))
@@ -608,8 +629,9 @@ soddisfatta, il modulo non è pronto.
 - [ ] Lo schema è una lista `PASSI` numerata applicata con
       `core.migrazioni.applica()` (backup automatico), passi additivi senza
       commit, viste passate come `viste=`?
-- [ ] I log/eventi sono append-only con single write-point
-      (`events.registra()` o equivalente unico)?
+- [ ] I log/eventi sono append-only e scritti **solo** con `busta.scrivi()`
+      (o `events.registra()`), con tipo dichiarato nel manifest e attore =
+      utente della sessione? Nessun campo "operatore" digitato a mano?
 - [ ] Lo stato con ciclo di vita è una **proiezione** dello storico, non un
       campo aggiornato?
 - [ ] Le transizioni di stato passano da una `StateMachine` dichiarata in

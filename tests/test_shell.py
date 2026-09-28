@@ -177,6 +177,17 @@ class TestShell(unittest.TestCase):
         self.assertIs(r["ok"], True)
         self.assertEqual(r["moduli"], {"ok": 2, "errore": 0, "assente": 0})
 
+    def test_orologi(self):
+        self.login("admin", "pw-admin")
+        with mock.patch.object(shell, "sfasamento_orologio",
+                               side_effect=lambda p: {4730: 5.0, 4731: -300.0}[p]):
+            d = self.c.get("/api/orologi").get_json()
+        self.assertEqual(d, {"soglia_s": 120, "sfasati": {"board": -300}})
+        self.assertIsNone(shell.sfasamento_orologio(4799, timeout=0.2))   # spento
+        self.c.post("/logout")
+        self.login()
+        self.assertEqual(self.c.get("/api/orologi").status_code, 403)
+
     def test_api_moduli_pubblica_per_scaffolder(self):
         d = self.c.get("/api/moduli").get_json()
         self.assertEqual([m["nome"] for m in d["moduli"]], ["andon", "board"])

@@ -32,7 +32,7 @@ from urllib.parse import urlsplit
 from flask import (Flask, Response, g, jsonify, redirect, render_template,
                    request)
 
-from . import __version__, adminbrowser, auth, registro
+from . import __version__, adminbrowser, auth, busta, registro
 from . import config as corecfg
 from . import db as coredb
 from . import manifest as coremanifest
@@ -56,6 +56,25 @@ def check_salute(porta: int, timeout: float = 1.0) -> bool:
         return True                          # risposta HTTP = processo vivo
     except Exception:
         return False
+
+
+def sfasamento_orologio(porta: int, timeout: float = 1.0) -> float | None:
+    """Secondi di differenza fra l'orologio del modulo (header HTTP Date) e
+    quello della shell; None se il modulo non risponde. La busta registra
+    l'ora del PC che scrive: un orologio sbagliato va segnalato (ADR-005)."""
+    from email.utils import parsedate_to_datetime
+    from datetime import datetime, timezone
+    try:
+        r = urllib.request.urlopen(f"http://127.0.0.1:{porta}/api/health",
+                                   timeout=timeout)
+    except urllib.error.HTTPError as e:
+        r = e
+    except Exception:
+        return None
+    data = r.headers.get("Date")
+    if not data:
+        return None
+    return (parsedate_to_datetime(data) - datetime.now(timezone.utc)).total_seconds()
 
 
 def manifest_shell(titolo: str = "ARGO") -> coremanifest.Manifest:
@@ -282,6 +301,23 @@ def create_app(comune: Path | None = None, radice: Path | None = None) -> Flask:
         finally:
             con.close()
         return jsonify({m["nome"]: check_salute(m["porta"]) for m in mods})
+
+    @app.get("/api/orologi")
+    @auth.richiede_permesso("core.admin")
+    def api_orologi():
+        """Moduli con l'orologio sfasato oltre busta.SOGLIA_OROLOGIO_S."""
+        con = db_core()
+        try:
+            mods = [m for m in registro.lista_moduli(con)
+                    if m["attivo"] and m["stato"] == "ok"]
+        finally:
+            con.close()
+        fuori = {}
+        for m in mods:
+            s = sfasamento_orologio(m["porta"])
+            if s is not None and abs(s) > busta.SOGLIA_OROLOGIO_S:
+                fuori[m["nome"]] = round(s)
+        return jsonify({"soglia_s": busta.SOGLIA_OROLOGIO_S, "sfasati": fuori})
 
     # --- amministrazione utenti (core.utenti) ----------------------------------
 
