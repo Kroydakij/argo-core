@@ -5,6 +5,28 @@ Tutte le modifiche rilevanti a argo-core. Formato ispirato a
 [SemVer](https://semver.org/lang/it/). Serie `0.x` = pre-1.0, API di `core.*`
 ancora passibile di aggiustamenti tra minor.
 
+## [Non rilasciato] — verso la 1.0
+
+### Aggiunto
+
+- **ADR del kernel 1.0** in `docs/adr/` (ADR-000…005), accettati.
+- **`core.migrazioni`** (kernel, ADR-004) — migrazioni di schema come lista di
+  passi numerati applicati da `applica()`: backup del DB con l'API di backup
+  online di SQLite (consistente anche in WAL) e verifica di integrità prima di
+  ogni migrazione, un passo per transazione, storia nella tabella di sistema
+  `_argo_schema` + `PRAGMA user_version`, avvio negato se il DB è più nuovo
+  del codice, retention dei backup, viste ricreate dopo l'ultimo passo.
+  `versione()` / `richiedi_versione()` per i lettori read-only;
+  `python -m core.migrazioni stato <db>` per il supporto.
+
+### Cambiato
+
+- **Scaffolder**: lo scheletro generato usa `PASSI` + `migrazioni.applica()`
+  al posto della `migrate_db()` libera.
+- **Regola 4 di `CORE_CONTESTO_AI.md`**: migrazioni additive **numerate e con
+  backup**. Gli helper di `core.migrate` restano invariati; una `migrate_db()`
+  0.x continua a funzionare ma non è conforme.
+
 ## [0.4.0] — 2026-07-13
 
 ### Aggiunto

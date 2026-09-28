@@ -60,14 +60,18 @@ chiedi: quasi sempre esiste una via stdlib o un helper di core.
    passa da UNA sola funzione (con `core.events` è `events.registra()`). Le
    righe hanno un campo `sorgente` (`MANUALE`/`SENSORE`) per distinguere il
    dato inserito a mano da quello letto da un'automazione.
-4. **Migrazioni solo additive**: lo schema si evolve con una funzione
-   `migrate_db()` eseguita all'avvio, composta dagli helper di `core.migrate`
-   (`ensure_table` con `IF NOT EXISTS`, `ensure_column` idempotente). Mai
-   `DROP TABLE`, mai ricreare il database.
-5. **Viste ricreate alla fine di ogni `migrate_db()`**: la definizione di ogni
-   vista vive come costante nel codice e viene passata a
-   `migrate.rebuild_views()` — sempre come ultimo passo. (SQLite può rompere
-   le viste silenziosamente durante i rename.)
+4. **Migrazioni solo additive, numerate, con backup**: lo schema si evolve
+   con una lista di passi numerati (`PASSI = [migrazioni.Passo(1, ...), ...]`)
+   applicata all'avvio da `core.migrazioni.applica()`, che fa il backup del DB
+   prima di ogni migrazione e registra la versione nel DB. I passi usano gli
+   helper di `core.migrate` (`ensure_table` con `IF NOT EXISTS`,
+   `ensure_column` idempotente) e **non fanno commit**. Un passo pubblicato
+   non si modifica: si aggiunge il successivo. Mai `DROP TABLE`, mai ricreare
+   il database; sui log append-only solo `ADD COLUMN`.
+5. **Viste ricreate dopo l'ultimo passo**: la definizione di ogni vista vive
+   come costante nel codice e viene passata ad `applica(..., viste=VISTE)`,
+   che la ricrea a ogni avvio dopo tutti i passi. (SQLite può rompere le viste
+   silenziosamente durante i rename.)
 6. **Identificatori SQL validati**: qualunque nome di tabella/colonna/vista che
    finisce interpolato in un DDL/DML passa prima dalla validazione (gli helper
    di core lo fanno già; non comporre SQL con f-string su input non fidato).
@@ -186,6 +190,28 @@ ensure_table(con, ddl) -> None               # pretende 'CREATE TABLE IF NOT EXI
 ensure_column(con, table, column, ddl_type) -> bool   # idempotente; True se aggiunta ora
 rebuild_views(con, views: dict[str, str]) -> None     # DROP+CREATE; SEMPRE alla fine
 ```
+
+### core.migrazioni — passi numerati con backup (kernel, ADR-004)
+
+```python
+Passo(numero: int, descrizione: str, funzione: Callable[[Connection], None])
+    # numeri consecutivi da 1; la funzione NON fa commit
+
+applica(db_path, passi, *, viste=None, backup_dir=None,
+        backup_da_tenere=5, versione_codice=None) -> Esito
+    # Esito(da, a, applicati, backup). Backup (API online SQLite) prima dei
+    # passi pendenti se il DB contiene dati; un passo = una transazione.
+    # backup_dir default: <cartella del DB>/_backup/<nome_db>/
+    # Solleva: PassiNonValidi, DBPiuNuovoDelCodice, BackupFallito,
+    #          MigrazioneFallita(.numero, .backup) — tutte MigrazioneError
+
+versione(db_path) -> int                     # sola lettura (PRAGMA user_version)
+richiedi_versione(db_path, minima, *, suggerimento="") -> int   # < minima -> MigrazioneError
+stato(db_path, *, backup_dir=None) -> dict   # versione, storia, backup presenti
+```
+
+CLI per il supporto: `python -m core.migrazioni stato <file.sqlite>`.
+La storia sta nella tabella di sistema `_argo_schema` (append-only) del DB.
 
 ### core.config — TOML fail-fast
 
@@ -417,11 +443,11 @@ sm = statemachine.StateMachine.da_config(corecfg.require(cfg, "macchina"))
 board = coreboard.Board.da_config(corecfg.require(cfg, "board"))
 turni = shifts.Turni.da_config(corecfg.require(cfg, "turni"))
 
-# 2. migrazione additiva + event log
+# 2. migrazione: passi numerati + backup automatico (core.migrazioni)
+PASSI = [migrazioni.Passo(1, "log eventi",
+                          lambda con: events.migra(con, extra_colonne={...}))]
 def migrate_db():
-    con = db.owned(DB_PATH)
-    events.migra(con, extra_colonne={...})   # viste ricreate alla fine, dentro migra()
-    con.commit(); con.close()
+    migrazioni.applica(DB_PATH, PASSI)
 
 # 3. scrittura: valida la transizione, POI appendi l'evento (single write-point)
 nuovo = sm.transita(stato_corrente, azione)          # TransizioneNonValida se vietata
@@ -465,8 +491,9 @@ soddisfatta, il modulo non è pronto.
 - [ ] Scrive **solo** sul proprio database, aperto con `db.owned()`?
 - [ ] Le letture da DB altrui usano `db.readonly()` (mode=ro)?
 - [ ] I dati stanno in `ARGO_COMUNE`, **mai** dentro la cartella del modulo?
-- [ ] `migrate_db()` è additiva, ri-eseguibile, composta dagli helper di
-      `core.migrate`, con le viste ricreate **alla fine**?
+- [ ] Lo schema è una lista `PASSI` numerata applicata con
+      `core.migrazioni.applica()` (backup automatico), passi additivi senza
+      commit, viste passate come `viste=`?
 - [ ] I log/eventi sono append-only con single write-point
       (`events.registra()` o equivalente unico)?
 - [ ] Lo stato con ciclo di vita è una **proiezione** dello storico, non un

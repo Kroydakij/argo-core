@@ -100,7 +100,7 @@ def _aggiungi_core_al_path() -> None:
 
 _aggiungi_core_al_path()
 from core import config as corecfg  # noqa: E402
-from core import db, migrate        # noqa: E402
+from core import migrate, migrazioni  # noqa: E402
 
 QUI = Path(__file__).resolve().parent
 CONFIG_PATH = QUI / "{nome}.toml"
@@ -110,17 +110,26 @@ COMUNE = Path(os.environ.get("ARGO_COMUNE", QUI / "dati"))
 DB_PATH = COMUNE / "{nome}.sqlite"
 
 
-def migrate_db() -> None:
-    """Migrazione additiva del DB di proprieta' del modulo (con gli helper core)."""
-    COMUNE.mkdir(parents=True, exist_ok=True)
-    con = db.owned(DB_PATH)
+# --- schema: passi di migrazione numerati (core.migrazioni) ------------
+# Un passo pubblicato non si modifica: per cambiare lo schema si AGGIUNGE il
+# passo successivo. I passi non fanno commit; solo DDL additivo.
+
+def _p1_schema_iniziale(con) -> None:
     migrate.ensure_table(con, """CREATE TABLE IF NOT EXISTS esempio (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         creato_il TEXT DEFAULT (datetime('now','localtime'))
     )""")
-    migrate.rebuild_views(con, {{}})     # gancio viste: SEMPRE alla fine
-    con.commit()
-    con.close()
+
+
+PASSI = [
+    migrazioni.Passo(1, "schema iniziale", _p1_schema_iniziale),
+]
+VISTE: dict[str, str] = {{}}          # ricreate SEMPRE dopo l'ultimo passo
+
+
+def migrate_db() -> None:
+    """Porta il DB all'ultimo passo, con backup prima (in COMUNE/_backup)."""
+    migrazioni.applica(DB_PATH, PASSI, viste=VISTE)
 
 
 def carica_config() -> dict:
@@ -189,8 +198,11 @@ python app.py            # -> http://localhost:{porta}
 
 ## Come estenderlo
 
-- Schema: aggiungi tabelle/colonne in `migrate_db()` solo in modo additivo
-  (`migrate.ensure_table`, `migrate.ensure_column`), viste ricreate alla fine.
+- Schema: aggiungi un nuovo passo in fondo a `PASSI` (mai modificare quelli
+  esistenti), solo in modo additivo (`migrate.ensure_table`,
+  `migrate.ensure_column`). Le viste stanno in `VISTE`. `core.migrazioni` fa
+  il backup del DB prima di applicare passi nuovi.
+  Stato per il supporto: `python -m core.migrazioni stato <file.sqlite>`.
 - Stato event-sourced: `core.events` (log append-only + `latest_state_per_entity`).
 - Transizioni: `core.statemachine`. Form: `core.forms`. Board: `core.board`.
   Turni: `core.shifts`. Auth a ruoli: `core.auth`.
