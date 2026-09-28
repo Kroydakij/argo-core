@@ -21,7 +21,8 @@ Moduli (Fase 2):
     statemachine macchina a stati dichiarativa (pura)
     shifts       turni parametrici a tempo di lettura (pura)
     forms        form-engine dichiarativo (validazione + render)
-    auth         utenti e ruoli con hashing Werkzeug (lazy)
+    auth         identita' centrale, sessione condivisa, permessi (ADR-001)
+                 (import esplicito: from core import auth; ha una CLI)
     board        board (kanban) config-driven
     inventory    inventario generico event-sourced (anagrafica + movimenti + giacenze)
     scaffold     generatore di scheletri di moduli (python -m core.scaffold)
@@ -40,4 +41,4 @@ Uso da un modulo della suite (nessuna installazione richiesta):
 """
 __version__ = "0.4.0"
 
-from . import auth, board, codes, config, db, events, export, forms, inventory, manifest, migrate, notify, schedule, shifts, statemachine  # noqa: F401,E402
+from . import board, codes, config, db, events, export, forms, inventory, manifest, migrate, notify, schedule, shifts, statemachine  # noqa: F401,E402

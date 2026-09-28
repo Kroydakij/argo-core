@@ -70,11 +70,16 @@ def rebuild_views(con: sqlite3.Connection, views: dict[str, str]) -> None:
         con.execute(ddl)
 
 
-def _ident(name: str) -> str:
+def ident(name: str) -> str:
     """Valida un identificatore SQL (tabella/colonna/vista) e lo quota.
 
     Difesa contro l'interpolazione accidentale di input non fidato nei DDL.
+    Pubblica dalla 1.0 (ADR-000): serve ai moduli che compongono SQL.
     """
     if not name or not all(c.isalnum() or c == "_" for c in name):
         raise ValueError(f"identificatore SQL non valido: {name!r}")
     return f'"{name}"'
+
+
+#: nome storico (0.x), usato internamente da core; per il codice nuovo: ident().
+_ident = ident

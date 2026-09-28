@@ -29,6 +29,26 @@ ancora passibile di aggiustamenti tra minor.
   (`ok`/`errore`/`assente`), `titolo`, `versione`, `menu`. Lo schema di
   `core.sqlite` passa a `core.migrazioni` (backup + versione).
 - `manifest.toml` per l'esempio `presenze`.
+- **`core.auth` riscritto** (kernel, ADR-001 parte 1) — identità centrale in
+  `comune/auth.sqlite`: utenti con ID stabile, gruppi, ruoli (insiemi di
+  permessi `<modulo>.<azione>`), assegnazioni a utente o gruppo; tutto come
+  eventi append-only (audit trail) con proiezioni in vista; credenziali a
+  parte (hash stdlib in formato Werkzeug). Sessioni con token (solo lo
+  SHA-256 nel DB), scadenza fissata all'apertura, logout/disattivazione/
+  revoca immediati. Backend pluggable (`Backend`, `BackendLocale`).
+  Integrazione nei moduli: `richiede_permesso()`, `pubblica`,
+  `inizializza()` (permessi verificati contro il manifest all'avvio,
+  redirect al login della shell, controllo `Origin` sui POST, Basic Auth
+  solo per utenti `servizio`). CLI: `crea-admin`, `importa` (utenti 0.x).
+- `migrate.ident()` pubblico (`_ident` resta come alias).
+
+### Rimosso
+
+- **API 0.x di `core.auth`** (tabella `utenti` per modulo, `migra(con,
+  table)`, `crea_utente(con, u, p, ruolo)`, `verifica`, `ha_ruolo`,
+  `richiede(*ruoli, verifica=)`, `lista_utenti`, `disattiva`): sostituita
+  dall'identità centrale. Gli utenti 0.x si portano con
+  `python -m core.auth importa --db <file>`.
 
 ### Cambiato
 
