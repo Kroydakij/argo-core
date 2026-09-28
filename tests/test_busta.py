@@ -10,7 +10,7 @@ from core import busta, manifest, migrate  # noqa: E402
 from core.busta import BustaError  # noqa: E402
 
 M = manifest.da_dict({
-    "modulo": {"nome": "andon", "versione": "1.0.0", "core": ">=0.4", "titolo": "A"},
+    "modulo": {"nome": "andon", "versione": "1.0.0", "core": ">=1.0", "titolo": "A"},
     "anagrafica": {"tipi": ["macchina"]},
     "eventi": [
         {"tipo": "andon.fermata_chiusa", "versione": 3, "entita": "macchina",

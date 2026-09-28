@@ -10,7 +10,7 @@
 # Lo stesso commit produce sempre lo stesso zip, byte per byte.
 #
 # Il contenuto rispetta .gitattributes (export-ignore): nel pacchetto entra il
-# framework, non i file di sviluppo (tests/, examples/, scripts/, CI).
+# framework con esempio e docs, non i file di sviluppo (tests/, scripts/, CI).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

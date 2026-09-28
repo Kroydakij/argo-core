@@ -175,6 +175,22 @@ riferimento di stile e composizione.
 
 ## 6. API reference (firme pubbliche)
 
+**Due livelli** (ADR-000, elenchi in `core.KERNEL` e `core.UTILITY`):
+
+- **Kernel** — obbligatorio per un modulo conforme: `config`, `db`,
+  `migrate`, `codes`, `manifest`, `migrazioni`, `busta`, `events`, `auth`,
+  `anagrafica`, `registro`, più il processo `shell`. Un modulo è
+  **conforme** se ha un manifest valido, usa `core.migrazioni`, protegge le
+  route con i permessi di `core.auth`, riferisce le entità condivise per ID
+  di anagrafica e scrive i log con la busta.
+- **Utility** — opzionali: `statemachine`, `shifts`, `schedule`, `forms`,
+  `board`, `inventory`, `export`, `notify`, `adminbrowser`, `scaffold`.
+  `import core` **non** le carica: si importano per nome
+  (`from core import board`).
+
+API stabile dalla 1.0 (SemVer): rotture solo in una major, dopo almeno una
+minor di `DeprecationWarning`. Ciò che inizia con `_` non è API.
+
 Tutto ciò che segue è stdlib-only salvo dove indicato. `con` è sempre una
 `sqlite3.Connection` aperta dal **modulo proprietario** con `db.owned()`
 (row_factory `sqlite3.Row` inclusa).

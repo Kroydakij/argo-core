@@ -2,10 +2,19 @@
 
 Tutte le modifiche rilevanti a argo-core. Formato ispirato a
 [Keep a Changelog](https://keepachangelog.com/it/1.1.0/); versioni in
-[SemVer](https://semver.org/lang/it/). Serie `0.x` = pre-1.0, API di `core.*`
-ancora passibile di aggiustamenti tra minor.
+[SemVer](https://semver.org/lang/it/). Dalla 1.0 SemVer vale per tutta l'API
+pubblica elencata in `CORE_CONTESTO_AI.md` (kernel e utility): rotture solo in
+una major, con almeno una minor di `DeprecationWarning` prima (ADR-000).
 
-## [Non rilasciato] — verso la 1.0
+## [Non rilasciato]
+
+## [1.0.0] — 2026-09-28
+
+Prima versione stabile: il **kernel** della suite (ADR-000…005 in
+`docs/adr/`). Login unico con permessi per modulo, anagrafica centralizzata,
+manifest dei moduli, migrazioni con backup, busta standard degli eventi.
+Rompe l'API 0.4: **guida alla migrazione in
+[`docs/MIGRAZIONE-1.0.md`](docs/MIGRAZIONE-1.0.md)**.
 
 ### Aggiunto
 
@@ -57,7 +66,6 @@ ancora passibile di aggiustamenti tra minor.
   (`[auth] durata_sessione_ore` obbligatoria, titolo e porta facoltativi).
 - Scaffolder: i moduli generati usano `auth.inizializza()`,
   `@richiede_permesso("<nome>.vedi")`, `/api/health` pubblica e la cornice.
-
 - **`core.busta`** (kernel, ADR-005) — busta standard di ogni log: `uid`,
   `tipo` dichiarato nel manifest, `versione`, `ts_utc` + `offset_min` (ora
   locale ricostruibile senza `tzdata`, anche al cambio dell'ora legale),
@@ -108,8 +116,11 @@ ancora passibile di aggiustamenti tra minor.
   rinomine e fusioni si vedono sulla board; le righe scritte col nome
   dell'attrezzo si leggono ancora.
 
-### Rimosso
+### Rotture dell'API (dettaglio in `docs/MIGRAZIONE-1.0.md`)
 
+- **`import core` carica solo il kernel** (ADR-000): le utility si importano
+  per nome (`from core import board`); `import core; core.board` senza import
+  esplicito ora solleva `AttributeError` con il suggerimento.
 - **API 0.x di `core.inventory`**: `crea_articolo()`, `disattiva_articolo()`,
   `lista_articoli()` (gli articoli si gestiscono in anagrafica); `Inventario`
   richiede `manifest=` e `anagrafica=`; `movimenta(con, entita_id, ...)` con
@@ -142,6 +153,12 @@ ancora passibile di aggiustamenti tra minor.
 
 ### Cambiato
 
+- **`core/__init__.py` dichiara i livelli**: `KERNEL`, `UTILITY`,
+  `APPLICAZIONI`. `migrazioni`, `auth`, `anagrafica`, `registro` si caricano
+  al primo accesso (`core.auth`), così le loro CLI non importano due volte.
+  `tests/test_architettura.py` verifica che il kernel non importi utility.
+- **`migrate._ident`** ora emette `DeprecationWarning` (usa `migrate.ident`):
+  sparisce nella 2.0.
 - **`core.config.carica_suite()`** ritorna anche `tipi` (tipi di anagrafica).
 - **`core.db.owned()`** apre il file come URI SQLite (`mode=rwc`); firma e
   comportamento invariati.
@@ -150,7 +167,6 @@ ancora passibile di aggiustamenti tra minor.
 - **Portale**: le tile dei moduli sono costruite con `textContent` (niente
   HTML iniettabile da nome/descrizione); mostrano titolo, versione ed errore
   di manifest.
-
 - **Scaffolder**: lo scheletro generato usa `PASSI` + `migrazioni.applica()`
   al posto della `migrate_db()` libera.
 - **Regola 4 di `CORE_CONTESTO_AI.md`**: migrazioni additive **numerate e con
@@ -222,5 +238,6 @@ Libreria di base (`db`, `migrate`, `codes`, `notify`, `schedule`, `export`) e
 portale (`portal`, `adminbrowser`): registro moduli, health-check, browser DB
 read-only. Punto di partenza di questo changelog.
 
+[1.0.0]: https://github.com/Kroydakij/argo-core/releases/tag/v1.0.0
 [0.4.0]: https://github.com/Kroydakij/argo-core/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Kroydakij/argo-core/releases/tag/v0.3.0

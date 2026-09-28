@@ -2,47 +2,66 @@
 argo-core — fondamenta per suite gestionali Flask + SQLite su un PC qualunque.
 
 Nessuna dipendenza obbligatoria oltre la libreria standard: Flask (e werkzeug,
-che arriva con esso) serve solo dove si serve web ed e' importato lazy. Import
-di `core` resta stdlib-only.
+che arriva con esso) serve solo dove si serve web ed e' importato lazy.
+`import core` resta stdlib-only.
 
-Moduli (Fase 0-1):
-    db        connessioni owned / readonly con impostazioni uniformi
-    migrate   migrazioni additive (ensure_table, ensure_column, rebuild_views)
-    codes     normalizzazione dei codici (registro + regole dichiarative)
-    notify    email SMTP con log append-only opzionale
-    schedule  scheduler a tempo di lettura (funzione pura)
-    export    CSV per Excel locale italiano
-    adminbrowser  blueprint browser DB read-only (richiede Flask: import esplicito)
-    portal    alias deprecato di core.shell (ADR-001)
+Due livelli (ADR-000). Criterio: nel kernel solo cio' che deve dare la stessa
+risposta a tutti i moduli.
 
-Moduli (Fase 2):
-    config       configurazione TOML fail-fast
-    events       layer event-sourced (log append-only + latest_state_per_entity)
-    statemachine macchina a stati dichiarativa (pura)
-    shifts       turni parametrici a tempo di lettura (pura)
-    forms        form-engine dichiarativo (validazione + render)
-    auth         identita' centrale, sessione condivisa, permessi (ADR-001)
-                 (import esplicito: from core import auth; ha una CLI)
-    board        board (kanban) config-driven
-    inventory    inventario generico event-sourced (anagrafica + movimenti + giacenze)
-    scaffold     generatore di scheletri di moduli (python -m core.scaffold)
-
-Kernel 1.0 (in costruzione, vedi docs/adr/):
-    migrazioni   passi di migrazione numerati + backup prima di migrare (ADR-004)
-                 (import esplicito: from core import migrazioni; ha una CLI)
+KERNEL — obbligatorio per un modulo conforme:
+    config       configurazione TOML fail-fast (+ config di suite argo.toml)
+    db           connessioni owned / readonly / attach_readonly
+    migrate      helper di migrazione additivi (ensure_table, ensure_column, ...)
+    codes        normalizzazione dei codici (registro + regole dichiarative)
     manifest     manifest.toml dei moduli: validazione + scansione (ADR-003)
-    registro     registro dei moduli e menu per permessi (core.sqlite, stdlib)
-    shell        la shell: login unico, cornice, menu, admin (python -m core.shell)
-    anagrafica   entita' condivise con ID stabile, alias, fusioni (ADR-002)
-                 (import esplicito: from core import anagrafica; ha una CLI)
+    migrazioni   passi numerati + backup prima di migrare (ADR-004, CLI)
+    busta        la busta standard di ogni log (ADR-005)
+    events       log di stati sulla busta + proiezione
+    auth         identita' centrale, sessione condivisa, permessi (ADR-001, CLI)
+    anagrafica   entita' condivise con ID stabile, alias, fusioni (ADR-002, CLI)
+    registro     registro dei moduli e menu per permessi (core.sqlite)
+
+UTILITY — opt-in, si importano per nome (`from core import board`):
+    statemachine, shifts, schedule, forms, board, inventory, export, notify,
+    adminbrowser (richiede Flask), scaffold (python -m core.scaffold)
+
+APPLICAZIONI — processi costruiti sul kernel:
+    shell        login unico, cornice, menu, amministrazione (python -m core.shell)
+    portal       alias deprecato di shell
+
+`import core` carica solo il kernel: config, db, migrate, codes, manifest,
+busta, events subito; migrazioni, auth, anagrafica, registro al primo accesso
+(`core.auth`), perche' hanno una CLI (`python -m core.auth`) e caricarli qui
+li farebbe importare due volte. Le librerie del kernel non importano mai le
+utility (tests/test_architettura.py lo verifica).
 
 Uso da un modulo della suite (nessuna installazione richiesta):
 
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from core import db, migrate, export
+    from core import auth, db, events, manifest, migrazioni
 """
-__version__ = "0.4.0"
+__version__ = "1.0.0"
 
-from . import board, codes, config, db, events, export, forms, inventory, manifest, migrate, notify, schedule, shifts, statemachine  # noqa: F401,E402
+KERNEL = ("config", "db", "migrate", "codes", "manifest", "migrazioni",
+          "auth", "anagrafica", "busta", "events", "registro")
+UTILITY = ("statemachine", "shifts", "schedule", "forms", "board",
+           "inventory", "export", "notify", "adminbrowser", "scaffold")
+APPLICAZIONI = ("shell", "portal")
+
+from . import busta, codes, config, db, events, manifest, migrate  # noqa: F401,E402
+
+_KERNEL_LAZY = ("migrazioni", "auth", "anagrafica", "registro")
+
+
+def __getattr__(nome: str):
+    """Kernel con CLI caricato al primo accesso; le utility non si caricano
+    da sole (ADR-000): vanno importate per nome."""
+    if nome in _KERNEL_LAZY:
+        import importlib
+        return importlib.import_module(f".{nome}", __name__)
+    if nome in UTILITY or nome in APPLICAZIONI:
+        raise AttributeError(f"core.{nome} non e' caricato da `import core` "
+                             f"(utility, ADR-000): usa `from core import {nome}`")
+    raise AttributeError(f"module 'core' has no attribute {nome!r}")

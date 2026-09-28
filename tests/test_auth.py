@@ -307,7 +307,7 @@ class TestFile(unittest.TestCase):
 
 
 MANIFEST = manifest.da_dict({
-    "modulo": {"nome": "andon", "versione": "1.0.0", "core": ">=0.4",
+    "modulo": {"nome": "andon", "versione": "1.0.0", "core": ">=1.0",
                "titolo": "Andon"},
     "permessi": [{"id": "andon.vedi", "descrizione": "v"},
                  {"id": "andon.chiudi", "descrizione": "c"}],
