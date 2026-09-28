@@ -1,0 +1,146 @@
+{% extends "argo_cornice.html" %}
+{% block titolo %}Utenti e ruoli{% endblock %}
+{% block stile %}
+  table { border-collapse:collapse; width:100%; font-size:14px; margin-top:10px; }
+  th, td { border:1px solid var(--bordo); padding:6px 8px; text-align:left; vertical-align:top; }
+  th { background:var(--card); }
+  form.inline { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  .permessi { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+              gap:4px 16px; margin:10px 0; font-size:13px; }
+  .permessi label { display:flex; gap:6px; align-items:flex-start; }
+  .permessi small { color:var(--muto); }
+  td button { padding:3px 8px; font-size:13px; }
+  .off { color:var(--muto); }
+{% endblock %}
+{% block contenuto %}
+<h1>Utenti, gruppi e ruoli</h1>
+<p class="msg" id="msg"></p>
+
+<h2>Utenti</h2>
+<table id="t-utenti"></table>
+<form class="inline" id="f-utente">
+  <input id="u-username" placeholder="username" required>
+  <input id="u-nome" placeholder="nome e cognome">
+  <input id="u-password" type="password" placeholder="password iniziale" autocomplete="new-password">
+  <select id="u-tipo"><option value="persona">persona</option><option value="servizio">servizio (script)</option></select>
+  <button class="primario">Crea utente</button>
+</form>
+
+<h2>Gruppi</h2>
+<table id="t-gruppi"></table>
+<form class="inline" id="f-gruppo">
+  <input id="g-nome" placeholder="nome gruppo" required>
+  <button class="primario">Crea gruppo</button>
+</form>
+<form class="inline" id="f-membro">
+  <select id="m-gruppo"></select><select id="m-utente"></select>
+  <button name="azione" value="aggiungi">Aggiungi al gruppo</button>
+  <button name="azione" value="rimuovi">Togli dal gruppo</button>
+</form>
+
+<h2>Ruoli</h2>
+<table id="t-ruoli"></table>
+<form id="f-ruolo">
+  <div class="inline" style="display:flex;gap:8px;margin-top:12px">
+    <select id="r-id"><option value="">— nuovo ruolo —</option></select>
+    <input id="r-nome" placeholder="nome ruolo" required>
+    <button class="primario">Salva ruolo</button>
+  </div>
+  <div class="permessi" id="r-permessi"></div>
+</form>
+<form class="inline" id="f-assegna">
+  <select id="a-ruolo"></select>
+  <select id="a-chi"></select>
+  <button name="azione" value="assegna">Assegna</button>
+  <button name="azione" value="revoca">Revoca</button>
+</form>
+{% endblock %}
+
+{% block script %}
+<script>
+const $ = id => document.getElementById(id);
+let D = null;
+const el = (tag, testo, attr) => { const e = document.createElement(tag);
+  if (testo !== undefined) e.textContent = testo; Object.assign(e, attr || {}); return e; };
+function tabella(t, intest, righe) {
+  t.replaceChildren();
+  const tr = t.insertRow(); intest.forEach(h => tr.appendChild(el("th", h)));
+  righe.forEach(r => { const row = t.insertRow();
+    r.forEach(v => { const c = row.insertCell();
+      if (v instanceof Node) c.appendChild(v); else c.textContent = v ?? ""; }); });
+}
+async function post(url, dati) {
+  const r = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" },
+                               body: JSON.stringify(dati) });
+  const d = await r.json().catch(() => ({}));
+  $("msg").textContent = r.ok ? "fatto" : (d.msg || "errore");
+  $("msg").className = r.ok ? "msg" : "msg errore";
+  if (r.ok) await carica();
+  return r.ok;
+}
+const nomeUtente = id => (D.utenti.find(u => u.id === id) || {}).username || id;
+const nomeGruppo = id => (D.gruppi.find(g => g.id === id) || {}).nome || id;
+const nomeRuolo = id => (D.ruoli.find(r => r.id === id) || {}).nome || id;
+
+async function carica() {
+  D = await (await fetch("/api/utenti")).json();
+  tabella($("t-utenti"), ["utente", "nome", "tipo", "ruoli diretti", "gruppi", ""],
+    D.utenti.map(u => {
+      const az = el("span");
+      const pw = el("button", "nuova password");
+      pw.onclick = () => { const p = prompt("Nuova password per " + u.username);
+                           if (p) post("/api/utenti/" + u.id + "/password", { password: p }); };
+      const at = el("button", u.attivo ? "disattiva" : "riattiva");
+      at.onclick = () => post("/api/utenti/" + u.id + "/attivo", { attivo: !u.attivo });
+      az.append(pw, " ", at);
+      const nome = el("span", u.username, { className: u.attivo ? "" : "off" });
+      return [nome, u.nome, u.tipo,
+              D.assegnazioni.filter(a => a.utente_id === u.id).map(a => nomeRuolo(a.ruolo_id)).join(", "),
+              D.gruppi.filter(g => g.membri.includes(u.id)).map(g => g.nome).join(", "), az];
+    }));
+  tabella($("t-gruppi"), ["gruppo", "membri", "ruoli"],
+    D.gruppi.map(g => [g.nome, g.membri.map(nomeUtente).join(", "),
+      D.assegnazioni.filter(a => a.gruppo_id === g.id).map(a => nomeRuolo(a.ruolo_id)).join(", ")]));
+  tabella($("t-ruoli"), ["ruolo", "permessi"],
+    D.ruoli.map(r => [r.nome, r.permessi.join(", ")]));
+
+  const opzioni = (sel, voci) => { const v = sel.value; sel.replaceChildren(
+    ...voci.map(([val, txt]) => new Option(txt, val))); sel.value = v; };
+  opzioni($("m-gruppo"), D.gruppi.map(g => [g.id, g.nome]));
+  opzioni($("m-utente"), D.utenti.map(u => [u.id, u.username]));
+  opzioni($("a-ruolo"), D.ruoli.map(r => [r.id, r.nome]));
+  opzioni($("a-chi"), [...D.utenti.map(u => ["u:" + u.id, "utente " + u.username]),
+                       ...D.gruppi.map(g => ["g:" + g.id, "gruppo " + g.nome])]);
+  opzioni($("r-id"), [["", "— nuovo ruolo —"], ...D.ruoli.map(r => [r.id, r.nome])]);
+  disegnaPermessi();
+}
+function disegnaPermessi() {
+  const ruolo = D.ruoli.find(r => r.id === $("r-id").value);
+  $("r-nome").value = ruolo ? ruolo.nome : $("r-nome").value;
+  $("r-permessi").replaceChildren(...D.catalogo.map(p => {
+    const l = el("label"); const c = el("input", undefined, { type:"checkbox", value:p.id });
+    c.checked = !!ruolo && ruolo.permessi.includes(p.id);
+    const t = el("span", p.id); t.append(el("br"), el("small", p.descrizione));
+    l.append(c, t); return l; }));
+}
+$("r-id").onchange = disegnaPermessi;
+
+$("f-utente").onsubmit = ev => { ev.preventDefault();
+  post("/api/utenti", { username:$("u-username").value, nome:$("u-nome").value,
+                        password:$("u-password").value, tipo:$("u-tipo").value })
+    .then(ok => ok && ev.target.reset()); };
+$("f-gruppo").onsubmit = ev => { ev.preventDefault();
+  post("/api/gruppi", { nome:$("g-nome").value }).then(ok => ok && ev.target.reset()); };
+$("f-membro").onsubmit = ev => { ev.preventDefault();
+  post("/api/gruppi/" + $("m-gruppo").value + "/membri",
+       { utente_id:$("m-utente").value, rimuovi: ev.submitter.value === "rimuovi" }); };
+$("f-ruolo").onsubmit = ev => { ev.preventDefault();
+  const permessi = [...$("r-permessi").querySelectorAll("input:checked")].map(c => c.value);
+  post("/api/ruoli", { ruolo_id:$("r-id").value, nome:$("r-nome").value, permessi }); };
+$("f-assegna").onsubmit = ev => { ev.preventDefault();
+  const [tipo, id] = $("a-chi").value.split(":");
+  post("/api/ruoli/" + $("a-ruolo").value + "/assegnazioni",
+       { [tipo === "u" ? "utente_id" : "gruppo_id"]: id, revoca: ev.submitter.value === "revoca" }); };
+carica();
+</script>
+{% endblock %}

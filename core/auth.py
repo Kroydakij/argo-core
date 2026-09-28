@@ -655,17 +655,27 @@ def pubblica(f):
     return f
 
 
-def inizializza(app, *, manifest, auth_db: str | Path, url_login: str | None = None):
+def inizializza(app, *, manifest, auth_db: str | Path, url_login: str | None = None,
+                core_db: str | Path | None = None):
     """Collega il modulo all'identita' della suite. Va chiamata DOPO aver
     definito le route. Fail-fast:
       - ogni @richiede_permesso deve usare un permesso dichiarato nel manifest;
       - auth.sqlite deve esistere ed essere allo schema atteso (avvia la shell).
     Da qui in poi OGNI route richiede una sessione valida, salvo @pubblica;
     l'utente e' in flask.g.utente = {id, username, nome, tipo, permessi}.
+
+    Cornice comune: i template del modulo possono fare
+    {% extends "argo_cornice.html" %}; la variabile `argo` (utente, menu
+    filtrato per permessi, link alla shell) e' disponibile in ogni template.
+    Il menu si legge in sola lettura da core.sqlite (default: accanto ad
+    auth.sqlite, nella cartella dati comune).
     """
     from flask import Response, g, redirect, request
+    from jinja2 import ChoiceLoader, FileSystemLoader
     from urllib.parse import quote, urlsplit
 
+    from . import registro
+    from .config import NOME_CONFIG_SUITE, ConfigError, carica_suite
     from .manifest import ManifestError
 
     non_dichiarati = sorted({
@@ -682,10 +692,42 @@ def inizializza(app, *, manifest, auth_db: str | Path, url_login: str | None = N
     migrazioni.richiedi_versione(auth_db, len(PASSI_AUTH),
                                  suggerimento="Avvia prima la shell.")
 
+    core_db = Path(core_db) if core_db else auth_db.parent / "core.sqlite"
+    # titolo e porta della shell: da comune/argo.toml se c'e', se no default
+    titolo_suite, porta_shell = "ARGO", PORTA_SHELL
+    if (auth_db.parent / NOME_CONFIG_SUITE).exists():
+        try:
+            suite = carica_suite(auth_db.parent)
+            titolo_suite, porta_shell = suite["titolo"], suite["porta"]
+        except ConfigError as e:
+            raise AuthError(f"config di suite non valida: {e}") from e
+
     # la sessione Flask del modulo non deve pestare quella di altri moduli
     # sullo stesso host (i cookie non distinguono le porte)
     app.config["SESSION_COOKIE_NAME"] = f"argo_{manifest.nome}"
-    app.extensions["argo_auth"] = {"manifest": manifest, "auth_db": auth_db}
+    app.extensions["argo_auth"] = {"manifest": manifest, "auth_db": auth_db,
+                                   "core_db": core_db}
+    # la cornice comune sta in core/templates; i template del modulo vincono
+    app.jinja_loader = ChoiceLoader([
+        app.jinja_loader, FileSystemLoader(str(Path(__file__).parent / "templates"))])
+
+    def _url_shell() -> str:
+        return f"http://{request.host.split(':')[0]}:{porta_shell}"
+
+    @app.context_processor
+    def _argo_cornice():
+        u = g.get("utente")
+        menu = []
+        if u is not None and core_db.exists():
+            con = coredb.readonly(core_db)
+            try:
+                menu = registro.menu_per(con, u["permessi"], request.host.split(":")[0])
+            finally:
+                con.close()
+        return {"argo": {"utente": u, "menu": menu, "modulo": manifest.nome,
+                         "titolo_modulo": manifest.titolo,
+                         "titolo_suite": titolo_suite, "url_shell": _url_shell(),
+                         "url_corrente": request.url}}
 
     @app.before_request
     def _argo_auth():
@@ -700,8 +742,7 @@ def inizializza(app, *, manifest, auth_db: str | Path, url_login: str | None = N
         u = utente_da_richiesta(auth_db, request)
         if u is None:
             if request.method == "GET" and request.accept_mimetypes.accept_html:
-                host = request.host.split(":")[0]
-                base = url_login or f"http://{host}:{PORTA_SHELL}/login"
+                base = url_login or f"{_url_shell()}/login"
                 return redirect(f"{base}?next={quote(request.url, safe='')}")
             return Response("Autenticazione richiesta", 401,
                             {"WWW-Authenticate": 'Basic realm="ARGO"'})

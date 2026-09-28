@@ -67,6 +67,45 @@ def optional(cfg: dict, *chiavi: str, default: Any = None) -> Any:
     return default if val is _MANCANTE else val
 
 
+#: config di SUITE (non di un modulo): vive nella cartella dati comune.
+NOME_CONFIG_SUITE = "argo.toml"
+
+ESEMPIO_CONFIG_SUITE = """\
+# comune/argo.toml — configurazione della suite (ADR-001).
+[suite]
+titolo = "ARGO"            # facoltativo
+porta = 4700               # facoltativo: porta della shell
+
+[auth]
+durata_sessione_ore = 12   # OBBLIGATORIO: dopo quanto scade un login
+"""
+
+
+def carica_suite(comune: str | Path) -> dict:
+    """Legge e valida comune/argo.toml. Fail-fast: la shell non parte senza.
+
+    Ritorna {"titolo", "porta", "durata_sessione_ore"} gia' validati.
+    """
+    p = Path(comune) / NOME_CONFIG_SUITE
+    if not p.exists():
+        vecchio = " (portal.json non e' piu' letto: riporta qui titolo e porta)" \
+            if (Path(comune) / "portal.json").exists() else ""
+        raise ConfigError(f"config di suite mancante: {p}{vecchio}. "
+                          f"Contenuto minimo:\n\n{ESEMPIO_CONFIG_SUITE}")
+    cfg = load(p)
+    durata = require(cfg, "auth", "durata_sessione_ore")
+    if isinstance(durata, bool) or not isinstance(durata, (int, float)) or durata <= 0:
+        raise ConfigError(f"{p}: [auth] durata_sessione_ore deve essere un "
+                          f"numero positivo di ore")
+    porta = optional(cfg, "suite", "porta", default=4700)
+    if isinstance(porta, bool) or not isinstance(porta, int) or not 1 <= porta <= 65535:
+        raise ConfigError(f"{p}: [suite] porta non valida: {porta!r}")
+    titolo = optional(cfg, "suite", "titolo", default="ARGO")
+    if not isinstance(titolo, str) or not titolo.strip():
+        raise ConfigError(f"{p}: [suite] titolo non valido")
+    return {"titolo": titolo, "porta": porta, "durata_sessione_ore": float(durata)}
+
+
 def _cammina(cfg: dict, chiavi: tuple, mancante: Any) -> Any:
     """Percorre le chiavi annidate; ritorna `mancante` appena una non esiste."""
     if not chiavi:

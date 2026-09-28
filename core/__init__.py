@@ -13,7 +13,7 @@ Moduli (Fase 0-1):
     schedule  scheduler a tempo di lettura (funzione pura)
     export    CSV per Excel locale italiano
     adminbrowser  blueprint browser DB read-only (richiede Flask: import esplicito)
-    portal    il portale della suite, porta 4700 (richiede Flask: python -m core.portal)
+    portal    alias deprecato di core.shell (ADR-001)
 
 Moduli (Fase 2):
     config       configurazione TOML fail-fast
@@ -31,6 +31,8 @@ Kernel 1.0 (in costruzione, vedi docs/adr/):
     migrazioni   passi di migrazione numerati + backup prima di migrare (ADR-004)
                  (import esplicito: from core import migrazioni; ha una CLI)
     manifest     manifest.toml dei moduli: validazione + scansione (ADR-003)
+    registro     registro dei moduli e menu per permessi (core.sqlite, stdlib)
+    shell        la shell: login unico, cornice, menu, admin (python -m core.shell)
 
 Uso da un modulo della suite (nessuna installazione richiesta):
 

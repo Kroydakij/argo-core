@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+{#
+  Cornice comune della suite (ADR-001). Un modulo la usa cosi':
+
+    {% extends "argo_cornice.html" %}
+    {% block titolo %}Fermate{% endblock %}
+    {% block contenuto %} ... {% endblock %}
+
+  `argo` (fornita da core.auth.inizializza): utente, menu filtrato per i suoi
+  permessi, titolo della suite, link alla shell. Blocchi: titolo, stile,
+  contenuto, script.
+#}
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titolo %}{{ argo.titolo_modulo }}{% endblock %} · {{ argo.titolo_suite }}</title>
+<style>
+  :root { --bg:#12161c; --card:#1c232d; --bordo:#2c3644; --testo:#e6ebf2;
+          --muto:#8a97a8; --acc:#4da3ff; --ok:#38c172; --ko:#e3342f; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--testo);
+         font:15px/1.45 system-ui, "Segoe UI", sans-serif; }
+  .argo-barra { display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+                padding:10px 20px; border-bottom:1px solid var(--bordo);
+                background:#0e1217; }
+  .argo-barra .suite { font-weight:700; letter-spacing:.5px; color:var(--testo);
+                       text-decoration:none; font-size:18px; }
+  .argo-barra nav { display:flex; gap:4px; flex-wrap:wrap; flex:1; }
+  .argo-barra nav a { color:var(--muto); text-decoration:none; padding:5px 10px;
+                      border-radius:6px; font-size:14px; }
+  .argo-barra nav a:hover { color:var(--testo); background:var(--card); }
+  .argo-barra nav a.attiva { color:var(--testo); background:var(--card); }
+  .argo-barra .utente { color:var(--muto); font-size:13px; display:flex;
+                        gap:10px; align-items:center; }
+  .argo-barra .utente a { color:var(--muto); }
+  .argo-barra form { margin:0; }
+  .argo-barra button { background:none; border:1px solid var(--bordo);
+                       color:var(--muto); border-radius:6px; padding:4px 10px;
+                       cursor:pointer; font:inherit; font-size:13px; }
+  main { max-width:1100px; margin:0 auto; padding:24px; }
+  main a { color:var(--acc); }
+  h1 { font-size:22px; margin:0 0 16px; }
+  h2 { font-size:15px; color:var(--muto); text-transform:uppercase;
+       letter-spacing:1px; margin:28px 0 12px; }
+  input, button, select { background:var(--card); color:var(--testo);
+        border:1px solid var(--bordo); border-radius:7px; padding:8px 10px;
+        font:inherit; }
+  input:focus, select:focus { outline:none; border-color:var(--acc); }
+  button { cursor:pointer; } button.primario { border-color:var(--acc); }
+  .msg { color:var(--muto); font-size:13px; }
+  .errore { color:var(--ko); }
+  {% block stile %}{% endblock %}
+</style>
+</head>
+<body>
+<header class="argo-barra">
+  <a class="suite" href="{{ argo.url_shell }}/">{{ argo.titolo_suite }}</a>
+  <nav>
+    {% for v in argo.menu %}
+      <a href="{{ v.url }}"{% if argo.url_corrente.split('?')[0] == v.url %} class="attiva"{% endif %}>{{ v.titolo }}</a>
+    {% endfor %}
+  </nav>
+  {% if argo.utente %}
+  <div class="utente">
+    <span>{{ argo.utente.nome or argo.utente.username }}</span>
+    <a href="{{ argo.url_shell }}/password">password</a>
+    <form method="post" action="{{ argo.url_shell }}/logout">
+      <button type="submit">esci</button>
+    </form>
+  </div>
+  {% endif %}
+</header>
+<main>
+{% block contenuto %}{% endblock %}
+</main>
+{% block script %}{% endblock %}
+</body>
+</html>

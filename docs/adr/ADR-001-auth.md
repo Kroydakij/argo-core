@@ -1,7 +1,7 @@
 # ADR-001 — Autenticazione e autorizzazione
 
-- **Stato**: Accettato (2026-09-28) — parte 1 implementata in `core/auth.py`
-  (identità, sessioni, permessi); parte 2 (shell: login, cornice, menu) in corso
+- **Stato**: Accettato (2026-09-28) — implementato: `core/auth.py` (identità,
+  sessioni, permessi), `core/shell.py` + `core/registro.py` + cornice (shell)
 - **Data**: 2026-09-27
 - **Riguarda**: `core.auth` (riscritto), `core.portal` → shell, permessi nei manifest (ADR-003)
 - **Rompe l'API**: sì (vedi *Rotture API*)
@@ -289,5 +289,22 @@ l'assegnazione (attore = `sistema`).
 - Ogni scrittura richiede un `attore` esistente (o `sistema`): niente
   modifiche anonime nel log.
 - `migrate._ident` diventa pubblico come `migrate.ident` (alias mantenuto).
-- Lo scaffolder resta invariato in questa parte: genera moduli protetti da
-  `auth.inizializza()` solo con la parte 2, quando la shell fa il login.
+
+### Note di implementazione (parte 2: shell)
+
+- Il registro dei moduli è passato da `core.portal` a `core.registro`
+  (stdlib): serve anche ai moduli, per costruire il menu senza importare
+  Flask dalla shell.
+- `auth.inizializza()` fornisce la cornice (`argo_cornice.html`, caricata da
+  `core/templates` dopo i template del modulo) e la variabile `argo`; legge
+  titolo e porta della shell da `comune/argo.toml` se presente.
+- La shell dichiara i permessi del kernel con un manifest in codice
+  (`nome = "core"`) e usa lo stesso `inizializza()` dei moduli.
+- `GET /api/moduli` resta **pubblico**: lo scaffolder ne legge
+  `prossima_porta` senza login. Espone nomi e porte dei moduli, come in 0.x.
+- `POST /logout` è pubblico (una sessione scaduta deve poter uscire) e
+  cancella il cookie; il POST dalla cornice di un modulo verso la shell
+  passa il controllo `Origin` perché l'host è lo stesso.
+- Un amministratore non può disattivare se stesso dalla UI.
+- L'esempio `examples/presenze` non usa ancora l'auth: resta un esempio dei
+  mattoni utility; la sua conversione è rimandata ad ADR-002/005.

@@ -1,0 +1,22 @@
+{% extends "argo_cornice.html" %}
+{% block titolo %}Accesso{% endblock %}
+{% block stile %}
+  .accesso { max-width:360px; margin:60px auto; background:var(--card);
+             border:1px solid var(--bordo); border-radius:12px; padding:28px; }
+  .accesso label { display:block; font-size:13px; color:var(--muto); margin:14px 0 4px; }
+  .accesso input { width:100%; }
+  .accesso button { width:100%; margin-top:20px; }
+{% endblock %}
+{% block contenuto %}
+<form class="accesso" method="post" action="/login">
+  <h1>Accesso a {{ titolo }}</h1>
+  {% if errore %}<p class="errore">{{ errore }}</p>{% endif %}
+  <input type="hidden" name="next" value="{{ next }}">
+  <label for="username">Utente</label>
+  <input id="username" name="username" autocomplete="username" required autofocus>
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password"
+         autocomplete="current-password" required>
+  <button class="primario" type="submit">Entra</button>
+</form>
+{% endblock %}
