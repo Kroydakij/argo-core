@@ -8,7 +8,7 @@ di `core` resta stdlib-only.
 Moduli (Fase 0-1):
     db        connessioni owned / readonly con impostazioni uniformi
     migrate   migrazioni additive (ensure_table, ensure_column, rebuild_views)
-    codes     registro delle normalizzazioni codici (unico punto)
+    codes     normalizzazione dei codici (registro + regole dichiarative)
     notify    email SMTP con log append-only opzionale
     schedule  scheduler a tempo di lettura (funzione pura)
     export    CSV per Excel locale italiano
@@ -33,6 +33,8 @@ Kernel 1.0 (in costruzione, vedi docs/adr/):
     manifest     manifest.toml dei moduli: validazione + scansione (ADR-003)
     registro     registro dei moduli e menu per permessi (core.sqlite, stdlib)
     shell        la shell: login unico, cornice, menu, admin (python -m core.shell)
+    anagrafica   entita' condivise con ID stabile, alias, fusioni (ADR-002)
+                 (import esplicito: from core import anagrafica; ha una CLI)
 
 Uso da un modulo della suite (nessuna installazione richiesta):
 

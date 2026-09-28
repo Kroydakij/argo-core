@@ -13,6 +13,12 @@ Uso:
     ...
     codes.norm("articolo9", " 252 ")     # -> "000000252"
     codes.norm("articolo9", "AB-12")     # -> "AB-12" (non numerico: invariato)
+
+Per i tipi di ANAGRAFICA (condivisi tra moduli, ADR-002) la regola non e' una
+funzione Python di un modulo ma una lista dichiarativa in comune/argo.toml,
+composta da `componi()`: due moduli non possono dare risposte diverse.
+
+    codes.componi(["strip", "zfill:9"])(" 252 ")      # -> "000000252"
 """
 from __future__ import annotations
 
@@ -53,3 +59,39 @@ def zfill_numerico(cifre: int) -> Callable[[str], str]:
             return f"{base}.{suff}" if dot else base
         return v
     return _fn
+
+
+#: regole dichiarative ammesse in config (ADR-002). zfill:N = zfill_numerico(N).
+REGOLE = ("strip", "maiuscolo", "minuscolo", "senza_spazi", "zfill:N")
+
+
+def componi(regole) -> Callable[[str], str]:
+    """Funzione di normalizzazione da una lista di regole dichiarative,
+    applicate nell'ordine. Regola sconosciuta o malformata -> ValueError."""
+    if not isinstance(regole, (list, tuple)) or not all(isinstance(r, str) for r in regole):
+        raise ValueError("normalizzazione: serve una lista di regole (stringhe)")
+    passi: list[Callable[[str], str]] = []
+    for r in regole:
+        nome, _, arg = r.partition(":")
+        if nome == "zfill" and arg.isdigit() and 0 < int(arg) <= 64:
+            passi.append(zfill_numerico(int(arg)))
+        elif not arg and nome in _SEMPLICI:
+            passi.append(_SEMPLICI[nome])
+        else:
+            raise ValueError(f"regola di normalizzazione sconosciuta: {r!r} "
+                             f"(ammesse: {', '.join(REGOLE)})")
+
+    def _fn(v: str) -> str:
+        v = "" if v is None else str(v)
+        for p in passi:
+            v = p(v)
+        return v
+    return _fn
+
+
+_SEMPLICI: dict[str, Callable[[str], str]] = {
+    "strip": str.strip,
+    "maiuscolo": str.upper,
+    "minuscolo": str.lower,
+    "senza_spazi": lambda v: "".join(v.split()),
+}

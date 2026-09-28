@@ -28,7 +28,19 @@ python -m core.scaffold presenze --dir examples
 
 ## Avvio
 
-Serve la shell della suite (login unico) sulla stessa cartella dati:
+Serve la shell della suite (login unico) sulla stessa cartella dati, con in
+`comune/argo.toml` il tipo di anagrafica che il modulo dichiara nel manifest:
+
+```toml
+[auth]
+durata_sessione_ore = 12
+
+[anagrafica.tipi.attrezzo]
+descrizione = "Attrezzi"
+normalizzazione = ["strip", "maiuscolo"]
+```
+
+Poi:
 
 ```
 pip install flask
