@@ -7,12 +7,12 @@ Un ADR accettato non si riscrive: si supera con uno nuovo.
 
 | ADR | Titolo | Stato |
 |---|---|---|
-| [000](ADR-000-kernel-vs-utility.md) | Kernel vs utility | Proposto |
-| [001](ADR-001-auth.md) | Autenticazione e autorizzazione | Proposto |
-| [002](ADR-002-anagrafica.md) | Anagrafica codici centralizzata | Proposto |
-| [003](ADR-003-manifest-moduli.md) | Manifest dei moduli | Proposto |
-| [004](ADR-004-migrazioni.md) | Migrazioni schema con backup | Proposto |
-| [005](ADR-005-busta-eventi.md) | Busta standard degli eventi | Proposto |
+| [000](ADR-000-kernel-vs-utility.md) | Kernel vs utility | Accettato |
+| [001](ADR-001-auth.md) | Autenticazione e autorizzazione | Accettato |
+| [002](ADR-002-anagrafica.md) | Anagrafica codici centralizzata | Accettato |
+| [003](ADR-003-manifest-moduli.md) | Manifest dei moduli | Accettato |
+| [004](ADR-004-migrazioni.md) | Migrazioni schema con backup | Accettato — implementato |
+| [005](ADR-005-busta-eventi.md) | Busta standard degli eventi | Accettato |
 
 Baseline di partenza: tag `v0.4.0-baseline` (= `v0.4.0`, commit `57daab5`).
 

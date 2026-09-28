@@ -1,6 +1,6 @@
 # ADR-002 — Anagrafica codici centralizzata
 
-- **Stato**: Proposto
+- **Stato**: Accettato (2026-09-28)
 - **Data**: 2026-09-27
 - **Riguarda**: nuovo `core.anagrafica`, `core.codes`, `core.inventory`, chiave entità di `core.events`
 - **Rompe l'API**: sì (vedi *Rotture API*)
@@ -208,7 +208,10 @@ anagrafica.elenco(con_ro, tipo, *, stati=("ATTIVO",)) -> list[dict]
 | vista `giacenze` con `codice, descrizione` dall'anagrafica locale | per `entita_id`; codice e descrizione si prendono dall'anagrafica (ATTACH) |
 | `codes.registra()` per famiglie condivise | per i tipi di anagrafica: regola dichiarativa in `argo.toml` |
 
-### Punti aperti per la revisione
+### Decisioni prese in revisione (2026-09-28)
 
-- Riuso di codici dopo obsolescenza: la proposta lo vieta finché l'entità
-  obsoleta porta il codice. Nella tua esperienza serve il riuso diretto?
+- Terzo stato `FUSO`: confermato.
+- Permesso di scrittura: uno per tipo, `core.anagrafica.modifica.<tipo>`.
+- Riuso di un codice obsoleto: **vietato** finché un'entità, anche
+  obsoleta, lo porta. Per liberarlo si rinomina prima quella vecchia
+  (evento esplicito, tracciato).

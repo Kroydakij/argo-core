@@ -1,6 +1,6 @@
 # ADR-005 — Busta standard degli eventi
 
-- **Stato**: Proposto
+- **Stato**: Accettato (2026-09-28)
 - **Data**: 2026-09-27
 - **Riguarda**: `core.events` (riscritto sopra la busta), `core.inventory`, log del kernel (auth, anagrafica), notifiche 1.x
 - **Rompe l'API**: sì (vedi *Rotture API*)
@@ -186,14 +186,10 @@ Per gli eventi di `auth`, che riguardano utenti e non entità di anagrafica,
 | `events.SORGENTI` | invariato |
 | `operatore=` (ovunque) | deprecato: accettato per una minor con `DeprecationWarning`, finisce solo in `note` |
 
-### Punti aperti per la revisione
+### Decisioni prese in revisione (2026-09-28)
 
-- Nome del componente: `core.busta` separato o funzioni dentro
-  `core.events`? Proposta: `core.busta` (kernel, piccolo), con
-  `core.events` che resta il pattern "log di stati" costruito sopra.
-- Soglia per l'avviso di orologio sfasato (proposta: 2 minuti).
-- `tipo` in `core.events`: oggi un log di stati ha un solo "genere" di
-  evento. Proposta: un tipo per log dichiarato dal modulo
-  (`"presenze.cambio_stato"`), con lo stato come colonna di dominio; in
-  alternativa un tipo per transizione (`"presenze.preleva"`), più espressivo
-  per le notifiche ma più verboso nel manifest.
+- Componente separato **`core.busta`** (kernel, piccolo); `core.events`
+  resta il pattern "log di stati" costruito sopra.
+- Soglia di avviso per l'orologio sfasato: **2 minuti**.
+- `tipo` in `core.events`: **un tipo per log**, dichiarato dal modulo
+  (es. `"presenze.cambio_stato"`), con lo stato come colonna di dominio.

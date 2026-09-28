@@ -1,6 +1,6 @@
 # ADR-004 — Migrazioni schema SQLite automatiche, con backup
 
-- **Stato**: Proposto
+- **Stato**: Accettato (2026-09-28) — implementato in `core/migrazioni.py`
 - **Data**: 2026-09-27
 - **Riguarda**: nuovo `core.migrazioni` (runner), convenzione `migrate_db()`, scaffolder; `core.migrate` resta
 - **Rompe l'API**: solo la convenzione (gli helper restano)
@@ -187,9 +187,18 @@ l'aggiornamento) ⇒ avvio negato con "avvia prima la shell".
   al runner, così che le viste siano ricreate **una volta, alla fine** di
   tutti i passi del DB.
 
-### Punti aperti per la revisione
+### Decisioni prese in revisione (2026-09-28)
 
-- Default suggerito per `backup_da_tenere` nello scaffolder/argo.toml
-  d'esempio: 5?
-- Serve un comando `python -m core.migrazioni stato <db>` per il supporto
-  (versione, passi, backup)? Proposta: sì, è poco codice.
+- `backup_da_tenere`: default **5**.
+- Comando di supporto `python -m core.migrazioni stato <db>` (versione,
+  passi, backup): **sì**.
+
+### Note di implementazione
+
+- Su un DB **appena creato** (nessuna tabella oltre a quella di sistema) il
+  runner salta il backup: sarebbe un file vuoto. Il backup si fa sempre
+  quando il DB contiene già oggetti, compresa l'adozione di un DB 0.x.
+- Un passo che fa `commit()` da sé viene rifiutato (`MigrazioneFallita`):
+  romperebbe l'atomicità "un passo = una transazione".
+- Finché `comune/argo.toml` non esiste (arriva con ADR-001/003), il numero
+  di backup si passa ad `applica(..., backup_da_tenere=N)`; il default è 5.

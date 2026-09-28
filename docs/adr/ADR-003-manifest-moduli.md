@@ -1,6 +1,6 @@
 # ADR-003 — Manifest dei moduli
 
-- **Stato**: Proposto
+- **Stato**: Accettato (2026-09-28)
 - **Data**: 2026-09-27
 - **Riguarda**: nuovo `core.manifest`, registro moduli della shell (`core.sqlite`), scaffolder
 - **Rompe l'API**: sì, per il portale (vedi *Rotture API*)
@@ -168,10 +168,9 @@ Così il manifest non può mentire: ciò che non è dichiarato non funziona.
 | `portal.upsert_modulo()`, `toggle_modulo()` | interni alla shell, basati su scansione ed eventi |
 | moduli senza manifest | non conformi: solo link nel menu |
 
-### Punti aperti per la revisione
+### Decisioni prese in revisione (2026-09-28)
 
-- Nome del file: `manifest.toml` o `argo.toml` dentro il modulo? (Il secondo
-  si confonde con `comune/argo.toml`: proposta `manifest.toml`.)
-- Serve già in 1.0 dichiarare nel manifest la tabella/DB dove finiscono gli
-  eventi (utile alle notifiche 1.x per sapere dove leggere)? Proposta: no,
-  si aggiunge in 1.x insieme alle notifiche.
+- Nome del file: `manifest.toml` (non `argo.toml`, che si confonderebbe con
+  `comune/argo.toml`).
+- La tabella/DB dove finiscono gli eventi **non** si dichiara in 1.0: si
+  aggiunge in 1.x insieme alle notifiche.

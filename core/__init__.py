@@ -26,6 +26,10 @@ Moduli (Fase 2):
     inventory    inventario generico event-sourced (anagrafica + movimenti + giacenze)
     scaffold     generatore di scheletri di moduli (python -m core.scaffold)
 
+Kernel 1.0 (in costruzione, vedi docs/adr/):
+    migrazioni   passi di migrazione numerati + backup prima di migrare (ADR-004)
+                 (import esplicito: from core import migrazioni; ha una CLI)
+
 Uso da un modulo della suite (nessuna installazione richiesta):
 
     import sys
