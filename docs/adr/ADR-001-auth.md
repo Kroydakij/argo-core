@@ -1,6 +1,7 @@
 # ADR-001 — Autenticazione e autorizzazione
 
-- **Stato**: Accettato (2026-09-28)
+- **Stato**: Accettato (2026-09-28) — parte 1 implementata in `core/auth.py`
+  (identità, sessioni, permessi); parte 2 (shell: login, cornice, menu) in corso
 - **Data**: 2026-09-27
 - **Riguarda**: `core.auth` (riscritto), `core.portal` → shell, permessi nei manifest (ADR-003)
 - **Rompe l'API**: sì (vedi *Rotture API*)
@@ -270,3 +271,23 @@ l'assegnazione (attore = `sistema`).
 - Postazioni condivise: in 1.0 basta il logout esplicito. Il "cambio utente
   rapido" (badge/PIN) è fuori scope; il backend pluggable è il punto
   d'aggancio per aggiungerlo.
+
+### Note di implementazione (parte 1)
+
+- **Hash delle password in stdlib** (`hashlib.scrypt`/`pbkdf2_hmac`) nello
+  stesso formato di Werkzeug (`scrypt:N:r:p$sale$hex`): gli hash 0.x si
+  importano senza reset (verificato nei test contro Werkzeug) e `core.auth`
+  non dipende più da Werkzeug fuori dall'integrazione Flask.
+- **Scadenza della sessione fissata all'apertura** (`scade_il_utc`
+  nell'evento `core.sessione_aperta`) e confrontata a tempo di lettura. Così
+  i moduli validano la sessione senza leggere `argo.toml`; la durata la
+  sceglie la shell al login (parte 2, da `[auth] durata_sessione_ore`).
+- Proiezioni come viste su `auth_eventi`: `auth_utenti`, `auth_gruppi`,
+  `auth_membri`, `auth_ruoli`, `auth_assegnazioni`, `auth_permessi_utente`,
+  `auth_sessioni`. Unicità di username/gruppo/ruolo garantita dal single
+  write-point (un solo scrittore: il kernel).
+- Ogni scrittura richiede un `attore` esistente (o `sistema`): niente
+  modifiche anonime nel log.
+- `migrate._ident` diventa pubblico come `migrate.ident` (alias mantenuto).
+- Lo scaffolder resta invariato in questa parte: genera moduli protetti da
+  `auth.inizializza()` solo con la parte 2, quando la shell fa il login.

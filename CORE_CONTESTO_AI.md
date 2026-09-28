@@ -358,23 +358,53 @@ Campo: `{"nome", "label", "tipo", "obbligatorio", "min"/"max" (number),
 (errore del programmatore, fail-fast). `render_html` non emette `<form>` né
 il bottone: li mette il template del modulo.
 
-### core.auth — utenti e ruoli (hashing Werkzeug, lazy)
+### core.auth — identità centrale, sessione condivisa, permessi (kernel, ADR-001)
+
+Un solo archivio utenti per la suite: `comune/auth.sqlite`, **scritto solo
+dal kernel** (shell e `python -m core.auth`). **Un modulo non crea né
+modifica utenti**: legge la sessione e i permessi in sola lettura.
+
+Nel modulo (Flask):
 
 ```python
-migra(con, table="utenti") -> None
-crea_utente(con, username, password, ruolo, *, table="utenti") -> None   # upsert
-imposta_password(con, username, password, *, table="utenti") -> None
-disattiva(con, username, *, attivo=False, table="utenti") -> None
-lista_utenti(con, *, table="utenti") -> list[dict]        # senza hash
-verifica(con, username, password, *, table="utenti") -> dict | None
-ha_ruolo(utente, *ruoli) -> bool
-richiede(*ruoli, verifica, realm="ARGO")   # decoratore Flask: Basic Auth + gate di ruolo
-    # verifica: callable (username, password) -> utente | None
-    # utente autenticato in flask.g.utente
+@app.get("/")
+@auth.richiede_permesso("andon.vedi")     # permesso DICHIARATO nel manifest
+def home(): ...                           # utente in flask.g.utente
+
+@app.get("/api/health")
+@auth.pubblica                            # unica eccezione: niente sessione
+def health(): ...
+
+auth.inizializza(app, manifest=M, auth_db=COMUNE / "auth.sqlite")  # DOPO le route
+# fail-fast: permesso usato ma non dichiarato -> ManifestError;
+#            auth.sqlite assente o vecchio -> errore ("avvia prima la shell")
+# da qui OGNI route richiede sessione valida (redirect al login della shell,
+# 401 per le API), salvo @pubblica; POST con Origin di un altro host -> 403.
+
+g.utente = {"id": UUID, "username", "nome", "tipo": "persona"|"servizio",
+            "permessi": frozenset}
+ha_permesso(utente, permesso) -> bool     # per mostrare/nascondere pulsanti
 ```
 
-I ruoli sono stringhe libere decise dal modulo. Le password sono sempre
-hashate (mai in chiaro nel DB).
+- Sessione: cookie `argo_sessione` (riservato) emesso dalla shell; vale per
+  tutti i moduli sullo stesso host. Logout, utente disattivato e permesso
+  revocato hanno effetto alla richiesta successiva.
+- Basic Auth solo per utenti di tipo `servizio` (script, sensori).
+- La sessione Flask del modulo usa il cookie `argo_<nome>` (lo imposta
+  `inizializza`): mai il nome `session` di default.
+- Riferisci sempre l'utente per `g.utente["id"]` (stabile), mai per username.
+
+Lato kernel (shell, CLI): `prepara_db`, `crea_utente`, `rinomina_utente`,
+`disattiva_utente`/`riattiva_utente`, `imposta_password`, `crea_gruppo`,
+`aggiungi_membro`/`rimuovi_membro`, `definisci_ruolo`, `assegna_ruolo`/
+`revoca_ruolo`, `login`, `apri_sessione`/`chiudi_sessione`, `sessione`,
+`permessi_effettivi`, `storico`. Ogni scrittura richiede `attore=` (ID utente
+o `auth.SISTEMA`) ed è un evento nel log `auth_eventi` (audit trail).
+
+```
+python -m core.auth crea-admin <username>          # primo amministratore
+python -m core.auth importa --db <modulo_0x.sqlite> # utenti 0.x, senza reset password
+```
 
 ### core.board — board (kanban) config-driven (puro)
 
@@ -570,7 +600,9 @@ soddisfatta, il modulo non è pronto.
       modificano dati?
 - [ ] I form usano `core.forms` (stessa definizione per validare e
       renderizzare); l'output HTML è escapato?
-- [ ] Eventuale auth usa `core.auth` (password hashate, mai in chiaro)?
+- [ ] Le route sono protette con `auth.richiede_permesso(...)` (o marcate
+      `@auth.pubblica`) e `auth.inizializza()` è chiamata dopo le route? Il
+      modulo **non** ha una sua tabella utenti né un suo login?
 - [ ] Nessun identificatore SQL interpolato senza validazione?
 - [ ] Flask è importato **lazy** (dentro `create_app()`), così il modulo è
       importabile e testabile senza Flask?

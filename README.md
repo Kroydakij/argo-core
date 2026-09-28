@@ -85,7 +85,8 @@ Layer applicativo event-sourced, tutto stdlib (Flask/Werkzeug lazy dove serve):
 - `core.statemachine` — transizioni dichiarative
 - `core.shifts` — turni parametrici a tempo di lettura
 - `core.forms` — form-engine dichiarativo (validazione + render)
-- `core.auth` — utenti e ruoli (hashing Werkzeug)
+- `core.auth` — identità centrale della suite: utenti, gruppi, ruoli e
+  sessione condivisa tra i moduli (ADR-001)
 - `core.board` — board config-driven
 - `core.inventory` — inventario generico event-sourced (anagrafica +
   movimenti append-only + giacenze come proiezione)
