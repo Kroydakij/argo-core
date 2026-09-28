@@ -1,0 +1,32 @@
+# Manifest del modulo demo "presenze attrezzatura" (ADR-003).
+# Cosa il modulo E': uguale in ogni installazione, versionato col codice.
+# Il dominio (attrezzi, stati, turni) resta in presenze.toml.
+
+[modulo]
+nome = "presenze"
+versione = "0.4.0"
+core = ">=0.4,<1.0"
+titolo = "Presenze attrezzatura"
+descrizione = "Ciclo di vita degli attrezzi: disponibile, in uso, in manutenzione"
+
+[[permessi]]
+id = "presenze.vedi"
+descrizione = "Vedere board, manutenzioni e turno corrente"
+
+[[permessi]]
+id = "presenze.registra_movimento"
+descrizione = "Prelevare, restituire o mandare in manutenzione un attrezzo"
+
+[[menu]]
+titolo = "Presenze"
+percorso = "/"
+permesso = "presenze.vedi"
+
+[anagrafica]
+tipi = []                  # gli attrezzi passeranno all'anagrafica con ADR-002
+
+[[eventi]]
+tipo = "presenze.cambio_stato"
+versione = 1
+entita = ""                # oggi l'attrezzo e' un codice libero, non un ID anagrafica
+descrizione = "Un attrezzo cambia stato (una transizione della macchina a stati)"

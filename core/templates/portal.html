@@ -90,14 +90,24 @@ async function caricaModuli() {
   const g = $("griglia"); g.innerHTML = "";
   $("nessun-modulo").hidden = d.moduli.length > 0;
   $("f-porta").placeholder = "porta (prox: " + d.prossima_porta + ")";
+  const div = (cls, testo) => {           // textContent: niente HTML iniettato
+    const e = document.createElement("div"); e.className = cls;
+    e.textContent = testo; return e;
+  };
   for (const m of d.moduli) {
+    if (m.stato === "assente") continue;   // manifest non piu' su disco
     const a = document.createElement("a");
     a.className = "tile"; a.target = "_blank";
     a.href = "http://" + d.host + ":" + m.porta + "/";
-    a.innerHTML = '<div class="nome"><span class="pallino" data-mod="' + m.nome +
-      '"></span>' + m.nome + (m.attivo ? "" : " (disattivo)") + "</div>" +
-      '<div class="desc">' + (m.descrizione || "") + "</div>" +
-      '<div class="porta">porta ' + m.porta + "</div>";
+    const nome = div("nome", "");
+    const p = document.createElement("span");
+    p.className = "pallino"; p.dataset.mod = m.nome;
+    nome.append(p, (m.titolo || m.nome) + (m.versione ? " · v" + m.versione : "") +
+                (m.attivo ? "" : " (disattivo)"));
+    a.append(nome, div("desc", m.stato === "errore"
+                                 ? "manifest non valido: " + (m.errore || "")
+                                 : (m.descrizione || "")),
+             div("porta", "porta " + m.porta));
     g.appendChild(a);
   }
   aggiornaSalute();

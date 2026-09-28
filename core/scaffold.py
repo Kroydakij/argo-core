@@ -9,6 +9,7 @@ Crea una cartella <dir>/<nome>/ con:
                   lazy dentro create_app() (lo scheletro parte davvero ed e'
                   testabile anche senza Flask installato).
   - <nome>.toml   config d'esempio (porta, titolo).
+  - manifest.toml cosa il modulo dichiara: permessi, menu, eventi (ADR-003).
   - templates/index.html
   - README.md     porta, DB, avvio, come estendere.
 
@@ -66,6 +67,7 @@ def genera(nome: str, porta: int, dest_dir: str | Path = ".") -> Path:
     (base / "templates").mkdir(parents=True)
     (base / "app.py").write_text(_app_py(nome, porta), encoding="utf-8")
     (base / f"{nome}.toml").write_text(_config_toml(nome, porta), encoding="utf-8")
+    (base / "manifest.toml").write_text(_manifest_toml(nome), encoding="utf-8")
     (base / "templates" / "index.html").write_text(_index_html(nome), encoding="utf-8")
     (base / "README.md").write_text(_readme(nome, porta), encoding="utf-8")
     return base
@@ -168,6 +170,47 @@ porta = {porta}
 '''
 
 
+def _intervallo_core() -> str:
+    """Versioni di core compatibili con lo scheletro: da questa (major.minor)
+    fino alla prossima major esclusa. Esempio: core 1.3.2 -> ">=1.3,<2.0"."""
+    from . import __version__
+    major, minor = (int(x) for x in __version__.split(".")[:2])
+    return f">={major}.{minor},<{major + 1}.0"
+
+
+def _manifest_toml(nome: str) -> str:
+    return f'''# Manifest del modulo {nome} (ADR-003): cosa il modulo E', uguale in ogni
+# installazione. Versionato col codice, mai dati d'installazione (quelli
+# stanno in {nome}.toml). La shell lo legge senza eseguire il modulo.
+# Ogni permesso o evento usato dal codice va dichiarato qui.
+
+[modulo]
+nome = "{nome}"
+versione = "0.1.0"
+core = "{_intervallo_core()}"
+titolo = "{nome.capitalize()}"
+descrizione = ""
+
+[[permessi]]
+id = "{nome}.vedi"
+descrizione = "Vedere il modulo"
+
+[[menu]]
+titolo = "{nome.capitalize()}"
+percorso = "/"
+permesso = "{nome}.vedi"
+
+[anagrafica]
+tipi = []                  # tipi di anagrafica usati, es. ["macchina"]
+
+# [[eventi]]
+# tipo = "{nome}.qualcosa_successo"
+# versione = 1
+# entita = ""              # tipo di anagrafica dell'entita', "" se nessuna
+# descrizione = "..."
+'''
+
+
 def _index_html(nome: str) -> str:
     return f'''<!doctype html>
 <html lang="it">
@@ -206,7 +249,11 @@ python app.py            # -> http://localhost:{porta}
 - Stato event-sourced: `core.events` (log append-only + `latest_state_per_entity`).
 - Transizioni: `core.statemachine`. Form: `core.forms`. Board: `core.board`.
   Turni: `core.shifts`. Auth a ruoli: `core.auth`.
-- Registra il modulo nel portale (porta {porta}) dalla home del portale.
+- `manifest.toml` dichiara nome, versione, permessi, voci di menu, tipi di
+  anagrafica ed eventi: aggiornalo quando aggiungi un permesso o un evento.
+- Il portale trova il modulo da solo leggendo `manifest.toml` (deploy =
+  copia della cartella accanto a `core`); dopo un aggiornamento: "rileggi
+  moduli" (`POST /api/moduli/rileggi`).
 '''
 
 

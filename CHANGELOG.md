@@ -18,8 +18,25 @@ ancora passibile di aggiustamenti tra minor.
   del codice, retention dei backup, viste ricreate dopo l'ultimo passo.
   `versione()` / `richiedi_versione()` per i lettori read-only;
   `python -m core.migrazioni stato <db>` per il supporto.
+- **`core.manifest`** (kernel, ADR-003) — `manifest.toml` statico per modulo
+  (nome, versione, core compatibile, permessi, menu, tipi di anagrafica,
+  eventi) con validazione fail-fast: chiavi sconosciute, id fuori dal
+  namespace del modulo, duplicati, menu con permesso non dichiarato, core
+  incompatibile. `scansiona()` legge le cartelle della suite e la porta da
+  `<modulo>.toml`.
+- **Portale: moduli scoperti dai manifest** — scansione all'avvio e con
+  `POST /api/moduli/rileggi`; registro con `origine`, `stato`
+  (`ok`/`errore`/`assente`), `titolo`, `versione`, `menu`. Lo schema di
+  `core.sqlite` passa a `core.migrazioni` (backup + versione).
+- `manifest.toml` per l'esempio `presenze`.
 
 ### Cambiato
+
+- **Scaffolder**: genera anche `manifest.toml` (permesso `<nome>.vedi`, una
+  voce di menu, intervallo `core` dalla versione corrente).
+- **Portale**: le tile dei moduli sono costruite con `textContent` (niente
+  HTML iniettabile da nome/descrizione); mostrano titolo, versione ed errore
+  di manifest.
 
 - **Scaffolder**: lo scheletro generato usa `PASSI` + `migrazioni.applica()`
   al posto della `migrate_db()` libera.

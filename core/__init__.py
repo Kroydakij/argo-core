@@ -29,6 +29,7 @@ Moduli (Fase 2):
 Kernel 1.0 (in costruzione, vedi docs/adr/):
     migrazioni   passi di migrazione numerati + backup prima di migrare (ADR-004)
                  (import esplicito: from core import migrazioni; ha una CLI)
+    manifest     manifest.toml dei moduli: validazione + scansione (ADR-003)
 
 Uso da un modulo della suite (nessuna installazione richiesta):
 
@@ -39,4 +40,4 @@ Uso da un modulo della suite (nessuna installazione richiesta):
 """
 __version__ = "0.4.0"
 
-from . import auth, board, codes, config, db, events, export, forms, inventory, migrate, notify, schedule, shifts, statemachine  # noqa: F401,E402
+from . import auth, board, codes, config, db, events, export, forms, inventory, manifest, migrate, notify, schedule, shifts, statemachine  # noqa: F401,E402
