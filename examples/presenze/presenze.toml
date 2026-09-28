@@ -22,7 +22,7 @@ MANUTENZIONE = { ripristina = "DISPONIBILE" }
 
 # Board: colonne e stati che vi confluiscono.
 [board]
-campi_tile = ["operatore"]
+campi_tile = ["chi"]            # username dell'ultimo che l'ha mosso
 [[board.colonne]]
 titolo = "Disponibili"
 stati = ["DISPONIBILE"]

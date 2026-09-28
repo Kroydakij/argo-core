@@ -74,6 +74,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol
 
+from . import busta
 from . import db as coredb
 from . import migrate, migrazioni
 
@@ -265,15 +266,8 @@ def _registra(con, tipo: str, *, attore: str, **campi) -> None:
     """SINGLE WRITE-POINT del log auth (solo INSERT). Busta ADR-005 +
     colonne di dominio. Non fa commit: lo fa la funzione pubblica chiamante."""
     _verifica_attore(con, attore)
-    locale = datetime.now().astimezone()
-    offset = int(locale.utcoffset().total_seconds() // 60)
-    cols = ["uid", "tipo", "versione", "ts_utc", "offset_min", "attore_id"]
-    vals = [str(uuid.uuid4()), tipo, 1, _iso(_ora_utc()), offset, attore]
-    for k, v in campi.items():
-        cols.append(migrate.ident(k))
-        vals.append(v)
-    con.execute(f"INSERT INTO auth_eventi ({','.join(cols)}) "
-                f"VALUES ({','.join('?' * len(vals))})", vals)
+    busta.inserisci(con, "auth_eventi", tipo=tipo, versione=1, attore_id=attore,
+                    dati=campi, commit=False)
 
 
 def _verifica_attore(con, attore: str) -> None:

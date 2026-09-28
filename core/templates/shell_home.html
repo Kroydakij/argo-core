@@ -39,6 +39,7 @@
 {% endif %}
 
 {% if admin %}
+<p class="errore" id="msg-orologi" hidden></p>
 <h2>Registro moduli</h2>
 <div class="barra">
   <button id="btn-rileggi">Rileggi moduli</button>
@@ -160,7 +161,15 @@ async function caricaRighe() {
   $("lnk-csv").hidden = false;
   $("msg-db").textContent = "offset " + offset;
 }
-caricaRegistro(); caricaDatabases();
+async function controllaOrologi() {
+  const d = await (await fetch("/api/orologi")).json();
+  const n = Object.entries(d.sfasati);
+  $("msg-orologi").hidden = n.length === 0;
+  $("msg-orologi").textContent = "Orologio sfasato (oltre " + d.soglia_s + " s) su: " +
+    n.map(([m, s]) => m + " " + (s > 0 ? "+" : "") + s + " s").join(", ") +
+    ". Gli eventi registrati da quel PC avranno l'ora sbagliata.";
+}
+caricaRegistro(); caricaDatabases(); controllaOrologi();
 {% endif %}
 </script>
 {% endblock %}

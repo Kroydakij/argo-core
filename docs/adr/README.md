@@ -12,7 +12,7 @@ Un ADR accettato non si riscrive: si supera con uno nuovo.
 | [002](ADR-002-anagrafica.md) | Anagrafica codici centralizzata | Accettato |
 | [003](ADR-003-manifest-moduli.md) | Manifest dei moduli | Accettato — implementato |
 | [004](ADR-004-migrazioni.md) | Migrazioni schema con backup | Accettato — implementato |
-| [005](ADR-005-busta-eventi.md) | Busta standard degli eventi | Accettato |
+| [005](ADR-005-busta-eventi.md) | Busta standard degli eventi | Accettato — implementato |
 
 Baseline di partenza: tag `v0.4.0-baseline` (= `v0.4.0`, commit `57daab5`).
 

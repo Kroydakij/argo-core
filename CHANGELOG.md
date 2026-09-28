@@ -58,8 +58,25 @@ ancora passibile di aggiustamenti tra minor.
 - Scaffolder: i moduli generati usano `auth.inizializza()`,
   `@richiede_permesso("<nome>.vedi")`, `/api/health` pubblica e la cornice.
 
+- **`core.busta`** (kernel, ADR-005) — busta standard di ogni log: `uid`,
+  `tipo` dichiarato nel manifest, `versione`, `ts_utc` + `offset_min` (ora
+  locale ricostruibile senza `tzdata`, anche al cambio dell'ora legale),
+  `attore_id` (dalla sessione, mai dedotto), `entita_id`, `sorgente`.
+  `crea_log()`, `scrivi()` (single write-point), `ora_locale()`, adozione
+  dei log 0.x senza riscrivere righe. `core.auth` scrive il suo log con la
+  stessa busta.
+- **Avviso orologio sfasato** nella shell (`GET /api/orologi`, oltre 120 s).
+- **Esempio `presenze`** conforme al kernel: login unico e permessi dal
+  manifest, eventi con busta (chi = utente della sessione), schema con
+  `core.migrazioni`, pagina nella cornice comune.
+
 ### Rimosso
 
+- **`core.events.registra(con, entita, stato, operatore=...)`** (0.x):
+  ora `registra(con, tipo, entita_id, stato, *, manifest, attore_id=None)`;
+  `operatore=` è deprecato e finisce in `note`. `stato_corrente`/`storico`
+  prendono `entita_id`. I log 0.x si adottano con `events.migra()` (busta
+  aggiunta, righe vecchie intatte e leggibili).
 - **API 0.x di `core.auth`** (tabella `utenti` per modulo, `migra(con,
   table)`, `crea_utente(con, u, p, ruolo)`, `verifica`, `ha_ruolo`,
   `richiede(*ruoli, verifica=)`, `lista_utenti`, `disattiva`): sostituita

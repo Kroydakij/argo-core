@@ -1,6 +1,6 @@
 # ADR-005 — Busta standard degli eventi
 
-- **Stato**: Accettato (2026-09-28)
+- **Stato**: Accettato (2026-09-28) — implementato in `core/busta.py` + `core/events.py`
 - **Data**: 2026-09-27
 - **Riguarda**: `core.events` (riscritto sopra la busta), `core.inventory`, log del kernel (auth, anagrafica), notifiche 1.x
 - **Rompe l'API**: sì (vedi *Rotture API*)
@@ -193,3 +193,27 @@ Per gli eventi di `auth`, che riguardano utenti e non entità di anagrafica,
 - Soglia di avviso per l'orologio sfasato: **2 minuti**.
 - `tipo` in `core.events`: **un tipo per log**, dichiarato dal modulo
   (es. `"presenze.cambio_stato"`), con lo stato come colonna di dominio.
+
+### Note di implementazione
+
+- `core.busta`: `crea_log()`, `aggiungi_busta()` (adozione 0.x), `scrivi()`
+  (moduli, con manifest), `inserisci()` (log del kernel `core.*`, senza
+  manifest: lo usa `core.auth`), `ora_locale()`, `e_legacy()`.
+- Finché l'anagrafica (ADR-002) non c'è, `entita_id` è una chiave opaca: la
+  verifica di esistenza e la sostituzione con l'ID canonico arrivano con
+  `core.anagrafica`. La busta controlla già che l'entità ci sia se il tipo
+  la dichiara, e che non ci sia se non la dichiara.
+- La busta non verifica che `attore_id` esista in `auth.sqlite`: nei moduli
+  viene dalla sessione (valida per costruzione); script e seed passano un ID
+  o `sistema`.
+- Log 0.x: le colonne della busta si aggiungono nullable; le righe vecchie
+  hanno `versione` NULL (= 0). Sui log di stati 0.x la colonna `entita` è
+  NOT NULL: `events.registra()` la riempie con lo stesso valore di
+  `entita_id`, così la proiezione usa `COALESCE(entita_id, entita)`.
+- `inventory` passa alla busta insieme all'anagrafica (ADR-002), per non
+  rompere la sua API due volte.
+- Avviso orologio: la shell confronta l'header HTTP `Date` di ogni modulo
+  con il proprio (`GET /api/orologi`, `core.admin`) e mostra in home i
+  moduli oltre `busta.SOGLIA_OROLOGIO_S` (120 s).
+- L'esempio `presenze` usa busta, login unico, permessi, migrazioni e
+  cornice: il campo "operatore" del form è sparito (lo dice la sessione).
