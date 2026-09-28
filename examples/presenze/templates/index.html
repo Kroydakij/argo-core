@@ -30,7 +30,11 @@
     {% for m in messaggi %}<div class="flash">{{ m }}</div>{% endfor %}
   {% endwith %}
 
-  {% if 'presenze.registra_movimento' in argo.utente.permessi %}
+  {% if vuoto %}
+  <p class="flash">Nessun attrezzo in anagrafica. Aggiungili dalla shell
+    (<a href="{{ argo.url_shell }}/anagrafica">Anagrafica</a>, tipo "attrezzo")
+    o con <code>python -m core.anagrafica importa --tipo attrezzo attrezzi.csv</code>.</p>
+  {% elif 'presenze.registra_movimento' in argo.utente.permessi %}
   <form class="movimento" method="post" action="{{ url_for('movimento') }}">
     {{ form | safe }}
     <button type="submit">Registra movimento</button>

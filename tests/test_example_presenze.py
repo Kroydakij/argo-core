@@ -28,62 +28,93 @@ def _carica_modulo(comune: Path):
     return mod
 
 
+TIPI = {"attrezzo": {"descrizione": "Attrezzi", "normalizzazione": ["strip", "maiuscolo"]}}
+
+
 class TestDemoPresenze(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.mod = _carica_modulo(Path(self.tmp.name))
+        comune = Path(self.tmp.name)
+        from core import anagrafica, db
+        self.anagrafica = anagrafica
+        anagrafica.prepara_db(anagrafica.percorso_db(comune), TIPI)   # fa la shell
+        self.ana_rw = db.owned(anagrafica.percorso_db(comune))
+        self.ids = {c: anagrafica.crea(self.ana_rw, "attrezzo", c, attore="sistema")
+                    for c in ("trapano-01", "scala-04")}
+        self.mod = _carica_modulo(comune)
         self.mod.migrate_db()
         self.con = self.mod.db.owned(self.mod.DB_PATH)
+        self.ana = self.mod.apri_anagrafica()
         self.cfg = self.mod.carica_config()
         self.sm = self.mod._macchina(self.cfg)
+        self.trapano = self.ids["trapano-01"]
 
     def tearDown(self):
-        self.con.close()
+        for c in (self.con, self.ana, self.ana_rw):
+            c.close()
         os.environ.pop("ARGO_COMUNE", None)
         self.tmp.cleanup()
 
-    def test_seed_iniziale_idempotente(self):
-        stati = self.mod.events.stato_corrente(self.con)
-        self.assertTrue(stati)
-        self.assertTrue(all(s["stato"] == "DISPONIBILE" for s in stati))
-        n = len(self.mod.events.stato_corrente(self.con))
-        self.mod.migrate_db()                       # ri-eseguire non ri-semina
-        self.assertEqual(len(self.mod.events.stato_corrente(self.con)), n)
+    def muovi(self, azione, attrezzo=None, attore="u-rossi"):
+        return self.mod.registra_movimento(self.con, self.ana, attrezzo or self.trapano,
+                                           azione, self.sm, attore_id=attore)
+
+    def test_attrezzi_dall_anagrafica_senza_seed(self):
+        righe = self.mod.righe_board(self.con, self.ana, self.sm)
+        self.assertEqual([(r["entita"], r["stato"], r["chi"]) for r in righe],
+                         [("SCALA-04", "DISPONIBILE", ""), ("TRAPANO-01", "DISPONIBILE", "")])
+        self.assertEqual(self.mod.events.stato_corrente(self.con), [])   # log vuoto
 
     def test_flusso_valido_e_proiezione(self):
-        attrezzo = self.mod._attrezzi(self.cfg)[0]
-        nuovo = self.mod.registra_movimento(self.con, attrezzo, "preleva", self.sm,
-                                            attore_id="u-rossi")
-        self.assertEqual(nuovo, "IN_USO")
-        self.assertEqual(self.mod.stato_di(self.con, attrezzo, self.sm), "IN_USO")
-        st = self.mod.events.stato_corrente(self.con, attrezzo)
-        self.assertEqual((st["attore_id"], st["tipo"]), ("u-rossi", "presenze.cambio_stato"))
-        self.mod.registra_movimento(self.con, attrezzo, "restituisci", self.sm,
-                                    attore_id="u-rossi")
-        self.assertEqual(self.mod.stato_di(self.con, attrezzo, self.sm), "DISPONIBILE")
+        self.assertEqual(self.muovi("preleva"), "IN_USO")
+        self.assertEqual(self.mod.stato_di(self.con, self.ana, self.trapano, self.sm),
+                         "IN_USO")
+        st = self.mod.events.stato_corrente(self.con, self.trapano)
+        self.assertEqual((st["attore_id"], st["tipo"], st["entita_id"]),
+                         ("u-rossi", "presenze.cambio_stato", self.trapano))
+        self.muovi("restituisci")
+        self.assertEqual(self.mod.stato_di(self.con, self.ana, self.trapano, self.sm),
+                         "DISPONIBILE")
 
-    def test_seed_fatto_dal_sistema(self):
-        attrezzo = self.mod._attrezzi(self.cfg)[0]
-        self.assertEqual(self.mod.events.storico(self.con, attrezzo)[0]["attore_id"],
-                         "sistema")
-
-    def test_transizione_non_valida_rifiutata(self):
-        attrezzo = self.mod._attrezzi(self.cfg)[0]
+    def test_transizione_non_valida_e_attrezzo_non_attivo(self):
         with self.assertRaises(self.mod.statemachine.TransizioneNonValida):
-            # da DISPONIBILE non si puo' 'restituisci'
-            self.mod.registra_movimento(self.con, attrezzo, "restituisci", self.sm,
-                                        attore_id="u")
+            self.muovi("restituisci")                  # da DISPONIBILE non si puo'
+        with self.assertRaises(ValueError):
+            self.muovi("preleva", attrezzo="id-sconosciuto")
+        self.anagrafica.rendi_obsoleta(self.ana_rw, self.ids["scala-04"], attore="sistema")
+        with self.assertRaises(ValueError):
+            self.muovi("preleva", attrezzo=self.ids["scala-04"])
+        self.assertEqual([r["entita"] for r in
+                          self.mod.righe_board(self.con, self.ana, self.sm)], ["TRAPANO-01"])
+
+    def test_rinomina_e_fusione_in_lettura(self):
+        self.muovi("preleva")
+        self.anagrafica.rinomina(self.ana_rw, self.trapano, "TR-1", attore="sistema")
+        righe = {r["entita"]: r["stato"] for r in
+                 self.mod.righe_board(self.con, self.ana, self.sm)}
+        self.assertEqual(righe["TR-1"], "IN_USO")                  # rinomina: subito
+        self.anagrafica.fondi(self.ana_rw, self.trapano, self.ids["scala-04"],
+                              attore="sistema")
+        righe = {r["entita"]: r["stato"] for r in
+                 self.mod.righe_board(self.con, self.ana, self.sm)}
+        self.assertEqual(righe, {"SCALA-04": "IN_USO"})           # storia del fuso
+        self.assertEqual(self.muovi("restituisci", attrezzo=self.trapano), "DISPONIBILE")
+        st = self.mod.events.stato_corrente(self.con, self.ids["scala-04"])
+        self.assertEqual(st["stato"], "DISPONIBILE")               # scritto canonico
+
+    def test_righe_prima_dell_anagrafica(self):
+        """Log scritto quando la chiave era il nome dell'attrezzo: si risolve."""
+        self.mod.events.registra(self.con, self.mod.EVENTO, "Trapano-01", "MANUTENZIONE",
+                                 manifest=self.mod.MANIFEST, attore_id="sistema")
+        self.assertEqual(self.mod.stato_di(self.con, self.ana, self.trapano, self.sm),
+                         "MANUTENZIONE")
 
     def test_manutenzioni_a_tempo_di_lettura(self):
-        attrezzo = self.mod._attrezzi(self.cfg)[0]
-        # mai manutenuto -> da_fare
-        m = self.mod.stato_manutenzioni(self.con, self.cfg, oggi="2026-07-07")
-        self.assertEqual(m[attrezzo]["stato"], "da_fare")
-        # inviato in manutenzione oggi -> l'ultimo evento MANUTENZIONE azzera la cadenza
-        self.mod.registra_movimento(self.con, attrezzo, "invia_manutenzione", self.sm,
-                                    attore_id="u")
-        m2 = self.mod.stato_manutenzioni(self.con, self.cfg)  # oggi reale
-        self.assertEqual(m2[attrezzo]["stato"], "ok")
+        m = self.mod.stato_manutenzioni(self.con, self.ana, self.cfg, oggi="2026-07-07")
+        self.assertEqual(m["TRAPANO-01"]["stato"], "da_fare")      # mai manutenuto
+        self.muovi("invia_manutenzione", attore="u")
+        m2 = self.mod.stato_manutenzioni(self.con, self.ana, self.cfg)   # oggi reale
+        self.assertEqual(m2["TRAPANO-01"]["stato"], "ok")
 
     @unittest.skipUnless(HA_FLASK, "Flask non installato")
     def test_http_con_login_della_suite(self):
@@ -107,14 +138,13 @@ class TestDemoPresenze(unittest.TestCase):
         pagina = client.get("/")
         self.assertEqual(pagina.status_code, 200)
         self.assertNotIn("Registra movimento", pagina.get_data(as_text=True))  # solo vede
-        attrezzo = self.mod._attrezzi(self.cfg)[0]
-        dati = {"attrezzo": attrezzo, "azione": "preleva"}
+        dati = {"attrezzo": "TRAPANO-01", "azione": "preleva"}
         self.assertEqual(client.post("/movimento", data=dati).status_code, 403)
         con = db.owned(auth_db)
         auth.assegna_ruolo(con, muove, utente_id=rossi, attore=admin)
         con.close()
         self.assertEqual(client.post("/movimento", data=dati).status_code, 302)
-        st = self.mod.events.stato_corrente(self.con, attrezzo)
+        st = self.mod.events.stato_corrente(self.con, self.trapano)
         self.assertEqual((st["stato"], st["attore_id"]), ("IN_USO", rossi))  # chi = sessione
         self.assertIn("rossi", client.get("/").get_data(as_text=True))      # 'chi' sulla board
 

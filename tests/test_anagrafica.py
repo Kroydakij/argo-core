@@ -217,6 +217,9 @@ class TestAnagrafica(unittest.TestCase):
         self.assertEqual(anagrafica.entita(self.con, a)["fusa_in"], b)
         self.assertEqual(anagrafica.canonico(self.con, a), c)
         self.assertEqual(anagrafica.canonico(self.con, "id-sconosciuto"), "id-sconosciuto")
+        self.assertEqual(sorted(anagrafica.equivalenti(self.con, a)), sorted([a, b, c]))
+        self.assertEqual(anagrafica.equivalenti(self.con, "boh"), ["boh"])
+        self.assertEqual(anagrafica.mappa_canonici(self.con), {a: c, b: c, c: c})
         vista = dict(self.con.execute("SELECT id, id_canonico FROM anagrafica_canonico"))
         self.assertEqual(vista, {a: c, b: c, c: c})
         for codice in ("A", "B", "VECCHIO-A"):                 # tutto risolve su C

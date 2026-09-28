@@ -1,6 +1,6 @@
 # ADR-002 — Anagrafica codici centralizzata
 
-- **Stato**: Accettato (2026-09-28) — parte 1 (kernel) implementata in `core/anagrafica.py`
+- **Stato**: Accettato (2026-09-28) — implementato (`core/anagrafica.py`, `core/inventory.py`, esempio `presenze`)
 - **Data**: 2026-09-27
 - **Riguarda**: nuovo `core.anagrafica`, `core.codes`, `core.inventory`, chiave entità di `core.events`
 - **Rompe l'API**: sì (vedi *Rotture API*)
@@ -251,3 +251,35 @@ l'esempio `presenze` sugli ID di anagrafica.
 - **Prestazioni** (viste sul log, 20.000 entità): `risolvi()` ~0,1 ms,
   `elenco()` ~0,2 s, vista `anagrafica_canonico` ~40 ms. Import ~1 ms per
   entità (una transazione ciascuna).
+
+### Note di implementazione (parte 2: inventory ed esempio)
+
+- **`Inventario` riceve il manifest e il percorso dell'anagrafica.** Il
+  manifest perché movimenti e soglie passano da `busta.scrivi()` (tipi
+  `<modulo>.movimento` e `<modulo>.soglia_impostata`, nomi di default
+  sovrascrivibili, verificati alla costruzione); il percorso perché ogni
+  scrittura controlla che l'articolo sia ATTIVO e del tipo giusto e lo
+  scrive già canonico. La firma `movimenta(con, entita_id, ...)` resta quella
+  di ADR-005.
+- **Soglia di riordino = evento** (`imposta_soglia()`), non attributo: ha una
+  regola (`sotto_scorta`) e il suo storico, quindi sta nel DB del modulo
+  (linea anti-EAV). Vale quella dell'entità canonica. L'**unità di misura**
+  invece descrive: attributo `unita` dell'entità.
+- **Giacenze per entità canonica, calcolate in Python**: una vista del DB del
+  modulo non può riferirsi a un DB collegato con ATTACH, quindi la vista
+  `inventario_saldi` somma per `entita_id` e `giacenza()` unisce con
+  `anagrafica.mappa_canonici()` e l'elenco degli articoli attivi.
+- **Tabelle nuove, 0.x intatte.** Il log 0.x `movimenti` ha `codice NOT NULL
+  REFERENCES articoli(codice)`: non può ricevere righe con il solo ID senza
+  riscrivere lo schema. I nomi di default diventano `inventario_movimenti`,
+  `inventario_soglie`, `inventario_saldi`; le tabelle 0.x restano e non sono
+  più lette. Adozione: `esporta_articoli_0x()` scrive il CSV per la CLI
+  dell'anagrafica, `adotta_0x()` copia i movimenti nel log nuovo
+  (idempotente su `id_0x`, ora locale di allora, `operatore` in `note`), le
+  soglie diventano eventi, gli articoli disattivati si segnalano per
+  renderli obsoleti dalla shell.
+- **`presenze`**: gli attrezzi sono l'elenco degli attivi di tipo `attrezzo`;
+  un attrezzo senza eventi è nello stato iniziale (niente seed, che
+  richiederebbe al modulo di scrivere in anagrafica). Le righe scritte prima,
+  con il nome dell'attrezzo come chiave, si leggono risolvendo il nome con
+  `risolvi()`: nessuna riscrittura del log.

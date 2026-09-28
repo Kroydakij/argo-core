@@ -23,10 +23,10 @@ percorso = "/"
 permesso = "presenze.vedi"
 
 [anagrafica]
-tipi = ["attrezzo"]        # entita' degli eventi (in anagrafica con ADR-002)
+tipi = ["attrezzo"]        # gli attrezzi sono entita' dell'anagrafica (argo.toml)
 
 [[eventi]]
 tipo = "presenze.cambio_stato"
 versione = 1
-entita = "attrezzo"        # oggi il codice dell'attrezzo; ID anagrafica con ADR-002
+entita = "attrezzo"        # entita_id = ID dell'attrezzo in anagrafica
 descrizione = "Un attrezzo cambia stato (una transizione della macchina a stati)"

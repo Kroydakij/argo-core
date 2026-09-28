@@ -92,8 +92,10 @@ Layer applicativo event-sourced, tutto stdlib (Flask/Werkzeug lazy dove serve):
 - `core.auth` — identità centrale della suite: utenti, gruppi, ruoli e
   sessione condivisa tra i moduli (ADR-001)
 - `core.board` — board config-driven
-- `core.inventory` — inventario generico event-sourced (anagrafica +
-  movimenti append-only + giacenze come proiezione)
+- `core.anagrafica` — entità condivise della suite: ID stabile, codici,
+  alias, fusioni, tutto come eventi (ADR-002)
+- `core.inventory` — inventario generico event-sourced (articoli in
+  anagrafica + movimenti append-only + giacenze come proiezione)
 - `core.scaffold` — `python -m core.scaffold <nome>`, con demo in `examples/`
 
 Vedi `CHANGELOG.md` per il dettaglio.
