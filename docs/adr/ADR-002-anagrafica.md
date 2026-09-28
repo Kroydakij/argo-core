@@ -35,9 +35,8 @@ finisce tutto il dominio: il dominio resta nei moduli (regola 12).
   (`python -m core.anagrafica importa ...`).
 - I moduli **leggono** con `db.readonly()` (risoluzione codici, liste,
   join) e **scrivono** tramite l'API HTTP della shell, inoltrando la sessione
-  dell'utente: l'attore dell'evento è l'utente vero e il permesso
-  (`core.anagrafica.modifica` o uno più fine per tipo, vedi punti aperti)
-  lo controlla la shell. Il kernel fornisce il client (`urllib`, stdlib):
+  dell'utente: l'attore dell'evento è l'utente vero e il permesso del tipo
+  (`core.anagrafica.modifica.<tipo>`, punto 3) lo controlla la shell. Il kernel fornisce il client (`urllib`, stdlib):
 
   ```python
   from core import anagrafica
@@ -101,6 +100,13 @@ Un'entità ha **solo** questi campi:
   `zfill:N`, `senza_spazi`). Un tipo condiviso non può avere una funzione
   Python scritta da un modulo: due moduli darebbero risposte diverse.
   `codes.registra()` con funzioni resta per famiglie private di un modulo.
+- **Un permesso di scrittura per tipo**: per ogni tipo in `argo.toml` il
+  kernel genera `core.anagrafica.modifica.<tipo>` (es.
+  `core.anagrafica.modifica.articolo`), assegnabile ai ruoli come qualunque
+  altro permesso (ADR-001). Copre tutti gli eventi di scrittura su entità di
+  quel tipo: creazione, rinomina, descrizione, obsolescenza/riattivazione,
+  alias, fusione. Si fondono solo entità dello stesso tipo. Chi importa gli
+  articoli non tocca così le macchine.
 - La normalizzazione si applica in scrittura (creazione, rinomina, alias) e
   in lettura (`risolvi`): chi cerca `" 252 "` trova `000000252`.
 
@@ -163,12 +169,16 @@ anagrafica.elenco(con_ro, tipo, *, stati=("ATTIVO",)) -> list[dict]
   ma sono "stato aggiornabile" (contro la regola 8) e possono divergere dal
   log. A volumi di anagrafica (migliaia–decine di migliaia di righe) le viste
   bastano. Se no, cache ricostruibile, mai fonte di verità.
+- **Permesso di scrittura unico (`core.anagrafica.modifica`).** Più semplice,
+  ma chi deve poter creare articoli di magazzino potrebbe anche rinominare o
+  fondere le macchine. Il permesso per tipo costa zero configurazione (lo
+  genera il kernel) e separa responsabilità diverse.
 - **Scissione (split) di entità.** Non supportata: si crea una nuova entità e
   si rende obsoleta la vecchia. Il caso è raro e le regole di
   riattribuzione dello storico sono di dominio.
 - **Stato solo ATTIVO/OBSOLETO come da richiesta iniziale.** Una fusione non è
   un'obsolescenza: la sorgente deve risolvere sulla destinazione. Serve il
-  terzo stato `FUSO`. *Nota: estende la specifica, da confermare.*
+  terzo stato `FUSO` (estende la specifica iniziale; confermato in revisione).
 
 ## Conseguenze
 
@@ -200,9 +210,5 @@ anagrafica.elenco(con_ro, tipo, *, stati=("ATTIVO",)) -> list[dict]
 
 ### Punti aperti per la revisione
 
-- Permesso di scrittura unico (`core.anagrafica.modifica`) o per tipo
-  (`core.anagrafica.modifica.articolo`)? Proposta: per tipo, generato dal
-  kernel per ogni tipo in `argo.toml`.
 - Riuso di codici dopo obsolescenza: la proposta lo vieta finché l'entità
   obsoleta porta il codice. Nella tua esperienza serve il riuso diretto?
-- Terzo stato `FUSO`: confermi?

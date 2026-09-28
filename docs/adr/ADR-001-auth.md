@@ -106,7 +106,8 @@ Vincoli: niente admin sul PC, niente servizi esterni, HTTP in chiaro in LAN
   modulo: il kernel lo verifica.
 - Il **registro dei permessi** è l'unione dei manifest scansionati dalla
   shell più i permessi del kernel (`core.admin`, `core.utenti`,
-  `core.anagrafica.modifica`, `core.link_esterni`).
+  `core.link_esterni` e un `core.anagrafica.modifica.<tipo>` per ogni tipo
+  di anagrafica, ADR-002).
 - Decoratore: `@auth.richiede_permesso("andon.chiudi_fermata")`. Un permesso
   non dichiarato nel manifest del modulo ⇒ **errore all'avvio** (fail-fast,
   regola 7), non un 403 a runtime.
@@ -268,4 +269,3 @@ l'assegnazione (attore = `sistema`).
 - Postazioni condivise (un PC, più operatori a turno): basta il logout
   esplicito, o serve "cambio utente rapido" (badge/PIN) già in 1.0?
   Proposta: fuori scope, ma il backend pluggable è il punto d'aggancio.
-- Nome del processo: `core.shell` va bene o preferisci tenere `core.portal`?
