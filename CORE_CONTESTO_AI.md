@@ -300,6 +300,8 @@ entita(con, id) -> dict | None        # id, tipo, codice, descrizione, stato,
                                       # fusa_in, attributi (dict), creata_il_utc
 elenco(con, tipo, *, stati=("ATTIVO",)) -> list[dict]
 canonico(con, id) -> str              # segue le fusioni (ID nei log vecchi)
+equivalenti(con, id) -> list[str]     # ID che valgono come la stessa entita'
+mappa_canonici(con) -> dict[str, str] # {id: id_canonico}, per aggregare i log
 alias(con, id) / storico(con, id) -> list[dict]
 normalizza(con, tipo, codice) -> str
 
@@ -372,7 +374,9 @@ stato_corrente(con, entita_id=None, *, vista=...) -> list[dict] | dict | None
 storico(con, entita_id, *, table=...) -> list[dict]   # cronologia completa
 ```
 
-La proiezione è "evento con id massimo per entità" (id monotono). Ogni riga
+`entita_id` è l'ID dell'entità in anagrafica (da `anagrafica.risolvi()`),
+mai un codice. La proiezione è "evento con id massimo per entità" (id monotono);
+dopo una fusione in anagrafica, raggruppa per `anagrafica.canonico()` in lettura. Ogni riga
 restituita ha anche `entita` (la chiave), comoda per `core.board`. Sui log
 0.x la chiave è il vecchio codice per le righe vecchie e `entita_id` per le
 nuove; `operatore=` è deprecato (finisce in `note`).
@@ -500,40 +504,46 @@ Board.da_config(sezione) -> Board            # sezione [board] del TOML
 Si alimenta con `events.stato_corrente(con)`. Gli stati non mappati non
 vengono mostrati (vista configurata; lo storico resta intero nel log).
 
-### core.inventory — inventario generico event-sourced
+### core.inventory — inventario sopra l'anagrafica (utility, ADR-002/005)
 
 ```python
 class GiacenzaInsufficiente(Exception)   # scarico rifiutato da movimenta()
 
-Inventario(causali: dict[str, str], *, consenti_negativo=False,
-           tabella_articoli="articoli", tabella_movimenti="movimenti",
-           vista_giacenze="giacenze")
-    # causali: {nome: "+"|"-"} — verso fisso per causale, dichiarato in config
-Inventario.da_config(sezione) -> Inventario   # sezione [inventario] del TOML
-.migra(con, *, extra_articoli=None, extra_movimenti=None) -> None
-    # anagrafica + log movimenti + vista giacenze (ricreata alla fine)
-.crea_articolo(con, codice, descrizione="", unita="pz", soglia_minima=None)  # upsert
-.disattiva_articolo(con, codice, *, attivo=False)  # via dalle giacenze, storico intatto
-.lista_articoli(con, *, solo_attivi=True) -> list[dict]
-.movimenta(con, codice, quantita, causale, *, sorgente="MANUALE",
-           operatore=None, note=None, extra=None) -> int
-    # SINGLE WRITE-POINT (solo INSERT). quantita SEMPRE positiva: il segno lo
-    # da' la causale. Rifiuta causale ignota, quantita<=0, articolo ignoto o
-    # disattivato, scarico sotto zero (salvo consenti_negativo) -> GiacenzaInsufficiente
-.giacenza(con, codice=None) -> list[dict] | dict | None   # proiezione SUM(movimenti)
-.sotto_scorta(con) -> list[dict]     # giacenza <= soglia_minima, a tempo di lettura
-.storico(con, codice) -> list[dict]  # movimenti in ordine cronologico
+Inventario(causali: dict[str, str], *, manifest, anagrafica: Path, tipo="articolo",
+           evento_movimento=None, evento_soglia=None, consenti_negativo=False,
+           tabella_movimenti="inventario_movimenti",
+           tabella_soglie="inventario_soglie", vista_saldi="inventario_saldi")
+    # causali: {nome: "+"|"-"}; anagrafica = anagrafica.percorso_db(COMUNE).
+    # Fail-fast: il manifest dichiara il tipo e gli eventi "<modulo>.movimento"
+    # e "<modulo>.soglia_impostata" (entita = tipo).
+Inventario.da_config(sezione, *, manifest, anagrafica) -> Inventario   # [inventario]
+.migra(con, *, extra_movimenti=None)       # in un Passo: log con busta + vista saldi
+.movimenta(con, entita_id, quantita, causale, *, sorgente="MANUALE",
+           attore_id=None, note=None, extra=None) -> int
+    # SINGLE WRITE-POINT (busta.scrivi). quantita SEMPRE positiva: il segno lo
+    # da' la causale. Rifiuta causale ignota, quantita<=0, articolo non ATTIVO
+    # o di altro tipo, scarico sotto zero (-> GiacenzaInsufficiente).
+.imposta_soglia(con, entita_id, soglia_minima | None, *, attore_id=None) -> int
+.giacenza(con, entita_id=None) -> list[dict] | dict | None
+    # {entita_id, codice, descrizione, unita, soglia_minima, giacenza}: articoli
+    # ATTIVI dall'anagrafica, somma dei movimenti per entita' CANONICA
+.sotto_scorta(con) -> list[dict]           # giacenza <= soglia, a tempo di lettura
+.storico(con, entita_id) -> list[dict]     # movimenti (anche degli articoli fusi)
+.esporta_articoli_0x(con, file) / .adotta_0x(con)   # migrazione da 0.x
 ```
 
-La giacenza non è un campo: è la **somma dei movimenti** (vista `giacenze`,
-solo articoli attivi). Le correzioni sono movimenti di rettifica (causali
-dedicate), mai UPDATE. La normalizzazione dei codici articolo resta compito
-del modulo, con `core.codes`, **prima** di chiamare queste funzioni.
+Gli articoli **non** si creano qui: sono entità di anagrafica (shell, CLI di
+import, `anagrafica.client.crea`). Il codice digitato si risolve con
+`anagrafica.risolvi()` prima di `movimenta()`. L'unità di misura è
+l'attributo `unita` dell'entità. La giacenza è la **somma dei movimenti**, le
+correzioni sono movimenti di rettifica, mai UPDATE; una fusione di articoli
+somma le giacenze senza riscrivere il log.
 
 Config tipo:
 
 ```toml
 [inventario]
+tipo = "articolo"          # tipo di anagrafica (in argo.toml e nel manifest)
 consenti_negativo = false
 [inventario.causali]
 CARICO = "+"
@@ -648,7 +658,8 @@ PASSI = [migrazioni.Passo(1, "log eventi",
 def migrate_db():
     migrazioni.applica(DB_PATH, PASSI)
 
-# 3. scrittura: valida la transizione, POI appendi l'evento (single write-point)
+# 3. scrittura: dal codice digitato all'ID, valida la transizione, POI appendi
+entita_id = anagrafica.risolvi(ana, "macchina", codice).id   # ana = anagrafica.apri(COMUNE)
 nuovo = sm.transita(stato_corrente, azione)          # TransizioneNonValida se vietata
 events.registra(con, "mio.cambio_stato", entita_id, nuovo, manifest=M)  # attore = sessione
 

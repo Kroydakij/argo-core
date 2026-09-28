@@ -308,6 +308,21 @@ def canonico(con, entita_id: str) -> str:
     raise AnagraficaError(f"ciclo di fusioni su {entita_id!r}")
 
 
+def equivalenti(con, entita_id: str) -> list[str]:
+    """Tutti gli ID che oggi valgono come la stessa entita' (la canonica e
+    quelle fuse in lei, anche a catena): per aggregare i log dei moduli senza
+    riscriverli. ID sconosciuto -> [entita_id]."""
+    cid = canonico(con, entita_id)
+    ids = [r[0] for r in con.execute(
+        "SELECT id FROM anagrafica_canonico WHERE id_canonico=? ORDER BY id", (cid,))]
+    return ids or [entita_id]
+
+
+def mappa_canonici(con) -> dict[str, str]:
+    """{id: id_canonico} per tutte le entita' (una query sola)."""
+    return dict(con.execute("SELECT id, id_canonico FROM anagrafica_canonico"))
+
+
 def risolvi(con, tipo: str, codice, *, sistema: str | None = None) -> Risoluzione | None:
     """Da un codice (qualunque forma: normalizzato qui) all'ID canonico.
 

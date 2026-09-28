@@ -211,7 +211,7 @@ Per gli eventi di `auth`, che riguardano utenti e non entità di anagrafica,
   NOT NULL: `events.registra()` la riempie con lo stesso valore di
   `entita_id`, così la proiezione usa `COALESCE(entita_id, entita)`.
 - `inventory` passa alla busta insieme all'anagrafica (ADR-002), per non
-  rompere la sua API due volte.
+  rompere la sua API due volte: fatto in ADR-002 parte 2 (vedi le note là).
 - Avviso orologio: la shell confronta l'header HTTP `Date` di ogni modulo
   con il proprio (`GET /api/orologi`, `core.admin`) e mostra in home i
   moduli oltre `busta.SOGLIA_OROLOGIO_S` (120 s).

@@ -7,9 +7,10 @@
 titolo = "Presenze attrezzatura"
 porta = 4710
 
-# Attrezzi tracciati. Nomi d'esempio, del tutto generici.
+# Gli attrezzi NON sono qui: sono entita' dell'anagrafica della suite, tipo
+# "attrezzo" (ADR-002). Si creano dalla shell (Anagrafica) o con
+#   python -m core.anagrafica importa --tipo attrezzo attrezzi.csv
 [attrezzi]
-elenco = ["Trapano-01", "Avvitatore-02", "Multimetro-03", "Scala-04"]
 manutenzione_giorni = 30        # cadenza manutenzione per attrezzo
 
 # Macchina a stati del ciclo di vita di un attrezzo.

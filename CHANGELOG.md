@@ -94,8 +94,31 @@ ancora passibile di aggiustamenti tra minor.
 - `auth.inizializza()` nega l'avvio di un modulo che dichiara nel manifest un
   tipo di anagrafica non configurato in `argo.toml`.
 
+- **`core.inventory` sopra l'anagrafica** (ADR-002 parte 2) — gli articoli
+  sono entità di `core.anagrafica` (tipo da `[inventario] tipo`), movimenti e
+  soglie di riordino sono log con la busta (tipi `<modulo>.movimento` e
+  `<modulo>.soglia_impostata` dichiarati nel manifest), la giacenza si somma
+  per entità canonica (una fusione somma le giacenze senza riscrivere il
+  log). `esporta_articoli_0x()` + `adotta_0x()` portano un inventario 0.x
+  (tabelle vecchie intatte).
+- `anagrafica.equivalenti()` e `anagrafica.mappa_canonici()` per aggregare i
+  log dei moduli per entità canonica.
+- **Esempio `presenze`**: gli attrezzi sono entità di anagrafica (tipo
+  `attrezzo`, `attrezzi.csv` d'esempio da importare); niente più seed;
+  rinomine e fusioni si vedono sulla board; le righe scritte col nome
+  dell'attrezzo si leggono ancora.
+
 ### Rimosso
 
+- **API 0.x di `core.inventory`**: `crea_articolo()`, `disattiva_articolo()`,
+  `lista_articoli()` (gli articoli si gestiscono in anagrafica); `Inventario`
+  richiede `manifest=` e `anagrafica=`; `movimenta(con, entita_id, ...)` con
+  `attore_id` al posto di `operatore`; `giacenza()`/`storico()` per ID; le
+  tabelle di default diventano `inventario_movimenti`/`inventario_soglie` e
+  la vista `inventario_saldi` (la vista `giacenze` 0.x non è più ricreata).
+- **Esempio `presenze`**: `[attrezzi] elenco` in `presenze.toml` (ora in
+  anagrafica); `registra_movimento()`, `stato_di()`, `stato_manutenzioni()`
+  prendono anche la connessione all'anagrafica.
 - **`core.events.registra(con, entita, stato, operatore=...)`** (0.x):
   ora `registra(con, tipo, entita_id, stato, *, manifest, attore_id=None)`;
   `operatore=` è deprecato e finisce in `note`. `stato_corrente`/`storico`
