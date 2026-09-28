@@ -10,7 +10,7 @@ Un ADR accettato non si riscrive: si supera con uno nuovo.
 | [000](ADR-000-kernel-vs-utility.md) | Kernel vs utility | Accettato |
 | [001](ADR-001-auth.md) | Autenticazione e autorizzazione | Accettato |
 | [002](ADR-002-anagrafica.md) | Anagrafica codici centralizzata | Accettato |
-| [003](ADR-003-manifest-moduli.md) | Manifest dei moduli | Accettato |
+| [003](ADR-003-manifest-moduli.md) | Manifest dei moduli | Accettato — implementato |
 | [004](ADR-004-migrazioni.md) | Migrazioni schema con backup | Accettato — implementato |
 | [005](ADR-005-busta-eventi.md) | Busta standard degli eventi | Accettato |
 

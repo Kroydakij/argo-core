@@ -30,6 +30,7 @@ import json
 import os
 import sqlite3
 import urllib.request
+from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 
@@ -37,13 +38,15 @@ from flask import Flask, Response, jsonify, render_template, request
 
 from . import adminbrowser
 from . import db as coredb
-from . import migrate
+from . import manifest, migrate, migrazioni
 
 PORTA_DEFAULT = 4700
 PRIMA_PORTA_MODULI = 4701
 
-COMUNE = Path(os.environ.get("ARGO_COMUNE",
-                             Path(__file__).resolve().parents[1] / "comune"))
+#: cartella della suite: core\ e le cartelle dei moduli sono sue figlie.
+RADICE_SUITE = Path(__file__).resolve().parents[1]
+
+COMUNE = Path(os.environ.get("ARGO_COMUNE", RADICE_SUITE / "comune"))
 CORE_DB = COMUNE / "core.sqlite"
 
 ADMIN_USER = os.environ.get("ARGO_PORTAL_USER", "admin")
@@ -52,7 +55,7 @@ ADMIN_PASS = os.environ.get("ARGO_PORTAL_PASS", "admin")
 
 # --- registro moduli (funzioni pure rispetto a una connessione: testabili) ---
 
-def migrate_core_db(con: sqlite3.Connection) -> None:
+def _p1_registro(con: sqlite3.Connection) -> None:
     migrate.ensure_table(con, """CREATE TABLE IF NOT EXISTS moduli (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT NOT NULL UNIQUE,
@@ -61,13 +64,92 @@ def migrate_core_db(con: sqlite3.Connection) -> None:
         attivo INTEGER NOT NULL DEFAULT 1,
         creato_il TEXT DEFAULT (datetime('now','localtime'))
     )""")
+
+
+def _p2_manifest(con: sqlite3.Connection) -> None:
+    """Colonne per i moduli scoperti dai manifest (ADR-003). Additivo.
+    origine: 'manuale' (registrato a mano, legacy) | 'manifest' (scansione).
+    stato:   'ok' | 'errore' (manifest/config non validi) | 'assente'."""
+    for col, tipo in (("origine", "TEXT NOT NULL DEFAULT 'manuale'"),
+                      ("versione", "TEXT"),
+                      ("titolo", "TEXT"),
+                      ("manifest_json", "TEXT"),
+                      ("stato", "TEXT NOT NULL DEFAULT 'ok'"),
+                      ("errore", "TEXT"),
+                      ("scansionato_il", "TEXT")):
+        migrate.ensure_column(con, "moduli", col, tipo)
+
+
+#: passi di migrazione di core.sqlite (runner: core.migrazioni, ADR-004)
+PASSI_CORE = [
+    migrazioni.Passo(1, "registro moduli", _p1_registro),
+    migrazioni.Passo(2, "moduli dai manifest", _p2_manifest),
+]
+
+
+def migrate_core_db(con: sqlite3.Connection) -> None:
+    """Applica lo schema del registro su una connessione gia' aperta, in modo
+    idempotente e SENZA backup/versione (per test in memoria). Il portale vero
+    usa migrazioni.applica(core.sqlite, PASSI_CORE)."""
+    for p in PASSI_CORE:
+        p.funzione(con)
     migrate.rebuild_views(con, {})           # nessuna vista oggi; il gancio resta
     con.commit()
 
 
 def lista_moduli(con) -> list[dict]:
-    return [dict(r) for r in con.execute(
-        "SELECT * FROM moduli ORDER BY porta")]
+    """Moduli del registro. Il manifest completo non esce: se ne espone il menu."""
+    out = []
+    for r in con.execute("SELECT * FROM moduli ORDER BY porta"):
+        d = dict(r)
+        grezzo = d.pop("manifest_json", None)
+        d["menu"] = json.loads(grezzo)["menu"] if grezzo else []
+        out.append(d)
+    return out
+
+
+def registra_scansione(con, esiti: list[manifest.Scansione]) -> dict:
+    """Scrive nel registro l'esito di manifest.scansiona(). Unico scrittore:
+    il portale. Un modulo rotto resta visibile come 'errore' (fuori dal menu);
+    un modulo da manifest non piu' trovato su disco diventa 'assente'."""
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    conteggi = {"ok": 0, "errore": 0, "assente": 0}
+    visti = set()
+    for s in esiti:
+        visti.add(s.nome)
+        if s.manifest is not None:
+            m = s.manifest
+            con.execute(
+                "INSERT INTO moduli (nome, porta, descrizione, origine, versione, "
+                "titolo, manifest_json, stato, errore, scansionato_il) "
+                "VALUES (?,?,?,'manifest',?,?,?,'ok',NULL,?) "
+                "ON CONFLICT(nome) DO UPDATE SET porta=excluded.porta, "
+                "descrizione=excluded.descrizione, origine='manifest', "
+                "versione=excluded.versione, titolo=excluded.titolo, "
+                "manifest_json=excluded.manifest_json, stato='ok', errore=NULL, "
+                "scansionato_il=excluded.scansionato_il",
+                (m.nome, s.porta, m.descrizione, m.versione, m.titolo,
+                 json.dumps(m.to_dict(), ensure_ascii=False), ts))
+            conteggi["ok"] += 1
+        else:
+            con.execute(
+                "INSERT INTO moduli (nome, porta, origine, stato, errore, "
+                "scansionato_il) VALUES (?,?,'manifest','errore',?,?) "
+                "ON CONFLICT(nome) DO UPDATE SET origine='manifest', "
+                "stato='errore', errore=excluded.errore, "
+                "scansionato_il=excluded.scansionato_il, "
+                "porta=CASE WHEN excluded.porta > 0 THEN excluded.porta "
+                "ELSE moduli.porta END",
+                (s.nome, s.porta or 0, s.errore, ts))
+            conteggi["errore"] += 1
+    for r in con.execute("SELECT nome FROM moduli WHERE origine='manifest' "
+                         "AND stato <> 'assente'").fetchall():
+        if r[0] not in visti:
+            con.execute("UPDATE moduli SET stato='assente', scansionato_il=? "
+                        "WHERE nome=?", (ts, r[0]))
+            conteggi["assente"] += 1
+    con.commit()
+    return conteggi
 
 
 def upsert_modulo(con, nome: str, porta: int, descrizione: str = "") -> None:
@@ -135,14 +217,27 @@ def _dbs_in_comune(comune: Path):
     return _scan
 
 
-def create_app(comune: Path | None = None) -> Flask:
+def create_app(comune: Path | None = None, radice: Path | None = None) -> Flask:
+    """radice: cartella della suite da scansionare per i manifest dei moduli
+    (default: la cartella che contiene core\\)."""
     comune = Path(comune or COMUNE)
+    radice = Path(radice or RADICE_SUITE)
     comune.mkdir(parents=True, exist_ok=True)
     core_db = comune / "core.sqlite"
 
-    con = coredb.owned(core_db)
-    migrate_core_db(con)
-    con.close()
+    migrazioni.applica(core_db, PASSI_CORE)  # backup + versione (ADR-004)
+
+    def rileggi() -> dict:
+        con = coredb.owned(core_db)
+        try:
+            return registra_scansione(con, manifest.scansiona(radice))
+        finally:
+            con.close()
+
+    esito = rileggi()                        # all'avvio: deploy = copia cartella
+    if esito["errore"]:
+        print(f"[PORTALE] {esito['errore']} modulo/i con manifest non valido: "
+              f"vedi /api/moduli")
 
     app = Flask(__name__)
     cfg = _leggi_config(comune)
@@ -184,6 +279,12 @@ def create_app(comune: Path | None = None) -> Flask:
             return jsonify({"ok": True})
         finally:
             con.close()
+
+    @app.post("/api/moduli/rileggi")
+    @richiede_admin
+    def api_moduli_rileggi():
+        """Riscansiona i manifest (dopo aver copiato o aggiornato un modulo)."""
+        return jsonify({"ok": True, **rileggi()})
 
     @app.post("/api/moduli/<nome>/toggle")
     @richiede_admin

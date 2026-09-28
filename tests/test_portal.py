@@ -56,6 +56,48 @@ class TestRegistro(unittest.TestCase):
     def test_check_salute_porta_muta(self):
         self.assertFalse(portal.check_salute(4799, timeout=0.2))
 
+    def _suite(self, *nomi, porta=4720):
+        """Una radice di suite con moduli generati dallo scaffolder."""
+        from core import scaffold
+        radice = Path(self.tmp.name) / "suite"
+        radice.mkdir(exist_ok=True)
+        for i, n in enumerate(nomi):
+            scaffold.genera(n, porta + i, radice)
+        return radice
+
+    def test_registra_scansione(self):
+        from core import manifest
+        radice = self._suite("andon", "board")
+        esito = portal.registra_scansione(self.con, manifest.scansiona(radice))
+        self.assertEqual(esito, {"ok": 2, "errore": 0, "assente": 0})
+        mods = {m["nome"]: m for m in portal.lista_moduli(self.con)}
+        self.assertEqual((mods["andon"]["origine"], mods["andon"]["stato"],
+                          mods["andon"]["porta"], mods["andon"]["versione"]),
+                         ("manifest", "ok", 4720, "0.1.0"))
+        self.assertEqual(mods["andon"]["menu"][0]["permesso"], "andon.vedi")
+        self.assertNotIn("manifest_json", mods["andon"])
+
+        # manifest rotto -> 'errore' (porta nota, resta visibile), poi rimosso -> 'assente'
+        (radice / "board" / "manifest.toml").write_text("[modulo\n", encoding="utf-8")
+        esito = portal.registra_scansione(self.con, manifest.scansiona(radice))
+        self.assertEqual(esito, {"ok": 1, "errore": 1, "assente": 0})
+        board = {m["nome"]: m for m in portal.lista_moduli(self.con)}["board"]
+        self.assertEqual((board["stato"], board["porta"]), ("errore", 4721))
+        self.assertIn("malformato", board["errore"])
+        import shutil
+        shutil.rmtree(radice / "andon")
+        esito = portal.registra_scansione(self.con, manifest.scansiona(radice))
+        self.assertEqual(esito["assente"], 1)
+        andon = {m["nome"]: m for m in portal.lista_moduli(self.con)}["andon"]
+        self.assertEqual(andon["stato"], "assente")
+
+    def test_moduli_manuali_non_toccati_dalla_scansione(self):
+        from core import manifest
+        portal.upsert_modulo(self.con, "legacy", 4790, "senza manifest")
+        portal.registra_scansione(self.con, manifest.scansiona(self._suite("andon")))
+        legacy = {m["nome"]: m for m in portal.lista_moduli(self.con)}["legacy"]
+        self.assertEqual((legacy["origine"], legacy["stato"]), ("manuale", "ok"))
+
 
 @unittest.skipUnless(HA_FLASK, "Flask non installato")
 class TestPortaleHTTP(unittest.TestCase):
@@ -68,7 +110,9 @@ class TestPortaleHTTP(unittest.TestCase):
         con.executemany("INSERT INTO eventi (nota) VALUES (?)",
                         [(f"riga {i}",) for i in range(60)])
         con.commit(); con.close()
-        self.app = portal.create_app(comune)
+        self.radice = comune / "suite"             # cartella suite vuota
+        self.radice.mkdir()
+        self.app = portal.create_app(comune, radice=self.radice)
         self.client = self.app.test_client()
 
     def tearDown(self):
@@ -124,6 +168,28 @@ class TestPortaleHTTP(unittest.TestCase):
 
     def test_health_vuoto(self):
         self.assertEqual(self.client.get("/api/health").get_json(), {})
+
+    def test_core_db_versionato(self):
+        from core import migrazioni
+        self.assertEqual(migrazioni.versione(Path(self.tmp.name) / "core.sqlite"),
+                         len(portal.PASSI_CORE))
+
+    def test_rileggi_trova_modulo_copiato(self):
+        from core import scaffold
+        self.assertEqual(self.client.post("/api/moduli/rileggi").status_code, 401)
+        scaffold.genera("andon", 4730, self.radice)      # "deploy = copia cartella"
+        r = self.client.post("/api/moduli/rileggi", headers=AUTH).get_json()
+        self.assertEqual((r["ok"], r["errore"]), (True, 0))
+        mods = self.client.get("/api/moduli").get_json()["moduli"]
+        self.assertEqual([(m["nome"], m["porta"], m["titolo"]) for m in mods],
+                         [("andon", 4730, "Andon")])
+
+    def test_scansione_all_avvio(self):
+        from core import scaffold
+        scaffold.genera("board", 4740, self.radice)
+        app = portal.create_app(Path(self.tmp.name), radice=self.radice)
+        mods = app.test_client().get("/api/moduli").get_json()["moduli"]
+        self.assertEqual([m["nome"] for m in mods], ["board"])
 
 
 if __name__ == "__main__":

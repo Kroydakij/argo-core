@@ -1,6 +1,6 @@
 # ADR-003 — Manifest dei moduli
 
-- **Stato**: Accettato (2026-09-28)
+- **Stato**: Accettato (2026-09-28) — implementato in `core/manifest.py` + portale
 - **Data**: 2026-09-27
 - **Riguarda**: nuovo `core.manifest`, registro moduli della shell (`core.sqlite`), scaffolder
 - **Rompe l'API**: sì, per il portale (vedi *Rotture API*)
@@ -174,3 +174,18 @@ Così il manifest non può mentire: ciò che non è dichiarato non funziona.
   `comune/argo.toml`).
 - La tabella/DB dove finiscono gli eventi **non** si dichiara in 1.0: si
   aggiunge in 1.x insieme alle notifiche.
+
+### Note di implementazione
+
+- `core/manifest.py`: `carica()`, `da_dict()`, `compatibile()`,
+  `verifica_tipi()`, `scansiona()`. `descrizione` in `[modulo]` è facoltativa.
+- In più rispetto al testo sopra: l'`entita` di un evento, se non vuota,
+  deve comparire in `[anagrafica] tipi` (la dipendenza da un tipo deve
+  essere visibile in un punto solo).
+- Il portale (futura shell) scansiona all'avvio e con
+  `POST /api/moduli/rileggi`. Finché `comune/argo.toml` non esiste
+  (ADR-001/002), la presenza dei tipi di anagrafica non viene verificata in
+  scansione: `verifica_tipi()` è pronta per quando ci sarà.
+- L'applicazione del manifest a runtime (permessi in `richiede_permesso`,
+  tipo/versione in `busta.scrivi`, tipi in `anagrafica.risolvi`) arriva con
+  i rispettivi ADR-001, 005 e 002.

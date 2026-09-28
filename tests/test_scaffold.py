@@ -46,6 +46,17 @@ class TestScaffold(unittest.TestCase):
         cfg = tomllib.loads((base / "presenze.toml").read_text(encoding="utf-8"))
         self.assertEqual(cfg["app"]["porta"], 4701)
 
+    def test_manifest_generato_valido(self):
+        from core import manifest
+        base = scaffold.genera("magazzino", 4702, self.dir)
+        m = manifest.carica(base)                  # contro il core corrente
+        self.assertEqual(m.nome, "magazzino")
+        self.assertTrue(m.dichiara_permesso("magazzino.vedi"))
+        self.assertEqual(m.menu[0].permesso, "magazzino.vedi")
+        esiti = manifest.scansiona(self.dir)       # la shell lo trova da sola
+        self.assertEqual([(s.nome, s.porta, s.errore) for s in esiti],
+                         [("magazzino", 4702, None)])
+
     def test_migrate_db_gira_senza_flask(self):
         base = scaffold.genera("magazzino", 4702, self.dir)
         import os

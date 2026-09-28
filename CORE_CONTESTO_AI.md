@@ -151,6 +151,7 @@ Genera `<dir>/<nome>/` con:
 | `<nome>.toml` | config d'esempio (`[app] titolo, porta`) |
 | `templates/index.html` | pagina base |
 | `README.md` | porta, DB, avvio, come estendere |
+| `manifest.toml` | cosa il modulo dichiara: nome, versione, core compatibile, permessi, menu, tipi di anagrafica, eventi (ADR-003) |
 
 Lo scheletro generato **parte da solo** (`python app.py`) e risponde su `/`.
 I dati vanno in `ARGO_COMUNE` (default di sviluppo: `./dati` accanto al
@@ -212,6 +213,55 @@ stato(db_path, *, backup_dir=None) -> dict   # versione, storia, backup presenti
 
 CLI per il supporto: `python -m core.migrazioni stato <file.sqlite>`.
 La storia sta nella tabella di sistema `_argo_schema` (append-only) del DB.
+
+### core.manifest — cosa dichiara un modulo (kernel, ADR-003)
+
+`<modulo>/manifest.toml`, statico e versionato col codice (mai dati
+d'installazione: quelli stanno in `<modulo>.toml`). Formato:
+
+```toml
+[modulo]
+nome = "andon"             # = nome della cartella
+versione = "1.2.0"         # SemVer X.Y.Z
+core = ">=1.0,<2.0"        # versioni di argo-core compatibili
+titolo = "Andon"
+descrizione = "..."        # facoltativa
+
+[[permessi]]               # id sempre "<nome>.<azione>", minuscolo snake_case
+id = "andon.chiudi_fermata"
+descrizione = "Chiudere una fermata aperta"
+
+[[menu]]
+titolo = "Fermate"
+percorso = "/"
+permesso = "andon.chiudi_fermata"   # deve essere dichiarato in [[permessi]]
+
+[anagrafica]
+tipi = ["macchina"]        # tipi di anagrafica usati
+
+[[eventi]]                 # tipo sempre "<nome>.<evento>"
+tipo = "andon.fermata_chiusa"
+versione = 1               # versione corrente dello schema dell'evento
+entita = "macchina"        # tipo di anagrafica (in [anagrafica] tipi) o ""
+descrizione = "..."
+```
+
+Chiavi sconosciute, id fuori namespace, duplicati, menu con permesso non
+dichiarato, `core` incompatibile → `ManifestError` (fail-fast).
+
+```python
+class ManifestError(ValueError)
+carica(percorso, *, versione_core=None) -> Manifest   # file o cartella del modulo
+da_dict(dati, *, nome_cartella=None, versione_core=None) -> Manifest
+Manifest: nome, versione, core, titolo, descrizione, permessi, menu,
+          tipi_anagrafica, eventi; .dichiara_permesso(id) -> bool;
+          .evento(tipo) -> Evento | None; .to_dict()
+compatibile(intervallo, versione) -> bool             # ">=1.0,<2.0", "1.3.0"
+verifica_tipi(manifest, tipi_disponibili) -> None     # tipo mancante -> ManifestError
+scansiona(radice) -> list[Scansione]                  # cartelle figlie con manifest.toml
+    # Scansione(cartella, nome, manifest|None, porta|None, errore|None)
+    # porta letta da <cartella>/<nome>.toml [app] porta (contratto di conformità)
+```
 
 ### core.config — TOML fail-fast
 
@@ -419,11 +469,19 @@ blueprint(dbs: dict | Callable[[], dict], auth=None, name="adminbrowser") -> Blu
 python -m core.portal        # -> http://localhost:4700
 ```
 
-Registro moduli (`comune/core.sqlite`, il portale ne è l'unico scrittore),
-health-check (`/api/health`), browser DB su tutta la cartella dati, config in
-`comune/portal.json`. Scritture protette da Basic Auth
-(`ARGO_PORTAL_USER`/`ARGO_PORTAL_PASS`). `GET /api/moduli` espone
-`prossima_porta` (usato dallo scaffolder).
+Registro moduli (`comune/core.sqlite`, il portale ne è l'unico scrittore,
+schema gestito con `core.migrazioni`), health-check (`/api/health`), browser
+DB su tutta la cartella dati, config in `comune/portal.json`. Scritture
+protette da Basic Auth (`ARGO_PORTAL_USER`/`ARGO_PORTAL_PASS`).
+
+I moduli con `manifest.toml` nelle cartelle sorelle di `core\` vengono
+**scoperti da soli** all'avvio e con `POST /api/moduli/rileggi` (admin):
+deploy di un modulo = copiarne la cartella. Un manifest non valido lascia il
+modulo nel registro con `stato = "errore"` e il messaggio; un modulo non più
+su disco diventa `"assente"`. `POST /api/moduli` (registrazione manuale)
+resta per i moduli legacy senza manifest. `GET /api/moduli` espone per ogni
+modulo `origine`, `stato`, `titolo`, `versione`, `menu`, e `prossima_porta`
+(usato dallo scaffolder).
 
 ### core.scaffold — generatore di moduli
 
@@ -487,7 +545,11 @@ Prima di consegnare il codice, verifica OGNI voce. Se una voce non è
 soddisfatta, il modulo non è pronto.
 
 - [ ] Il modulo è nato dallo **scaffolder** (o ne rispetta esattamente la
-      struttura: `app.py`, `<nome>.toml`, `templates/`, `README.md`)?
+      struttura: `app.py`, `<nome>.toml`, `manifest.toml`, `templates/`,
+      `README.md`)?
+- [ ] `manifest.toml` è valido (`core.manifest.carica()` non solleva) e
+      dichiara **ogni** permesso, voce di menu, tipo di anagrafica ed evento
+      che il codice usa?
 - [ ] Scrive **solo** sul proprio database, aperto con `db.owned()`?
 - [ ] Le letture da DB altrui usano `db.readonly()` (mode=ro)?
 - [ ] I dati stanno in `ARGO_COMUNE`, **mai** dentro la cartella del modulo?
