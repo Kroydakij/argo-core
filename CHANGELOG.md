@@ -41,6 +41,22 @@ ancora passibile di aggiustamenti tra minor.
   redirect al login della shell, controllo `Origin` sui POST, Basic Auth
   solo per utenti `servizio`). CLI: `crea-admin`, `importa` (utenti 0.x).
 - `migrate.ident()` pubblico (`_ident` resta come alias).
+- **`core.shell`** (kernel, ADR-001 parte 2, ex portale) — login unico
+  (cookie `argo_sessione` condiviso da tutti i moduli sullo stesso host,
+  redirect `next` solo verso la shell o moduli del registro), logout,
+  "cambia password", home con i moduli dell'utente, amministrazione di
+  utenti, gruppi e ruoli (`/utenti`, permesso `core.utenti`; catalogo dei
+  permessi dai manifest), registro moduli / health-check / browser DB
+  (permesso `core.admin`). Avvio negato senza `comune/argo.toml` o senza
+  utenti.
+- **Cornice comune** `argo_cornice.html`: barra con menu filtrato per
+  permessi, utente, "esci"; fornita ai moduli da `auth.inizializza()`.
+- **`core.registro`** — registro dei moduli (`core.sqlite`) in stdlib,
+  con `menu_per(permessi)`; lo usano shell e moduli.
+- **`core.config.carica_suite()`** — config di suite `comune/argo.toml`
+  (`[auth] durata_sessione_ore` obbligatoria, titolo e porta facoltativi).
+- Scaffolder: i moduli generati usano `auth.inizializza()`,
+  `@richiede_permesso("<nome>.vedi")`, `/api/health` pubblica e la cornice.
 
 ### Rimosso
 
@@ -49,6 +65,16 @@ ancora passibile di aggiustamenti tra minor.
   `richiede(*ruoli, verifica=)`, `lista_utenti`, `disattiva`): sostituita
   dall'identità centrale. Gli utenti 0.x si portano con
   `python -m core.auth importa --db <file>`.
+- **Portale con Basic Auth**: spariscono `ARGO_PORTAL_USER`/`ARGO_PORTAL_PASS`
+  e `richiede_admin`; `comune/portal.json` non è più letto (usa `argo.toml`).
+  `python -m core.portal` resta come alias deprecato di `core.shell`.
+
+### Corretto
+
+- Il browser DB della home non inserisce più i dati delle celle come HTML
+  (erano iniettabili): tabelle costruite con `textContent`.
+- `POST /api/moduli/rileggi` ritorna i conteggi sotto `"moduli"`: prima il
+  conteggio `ok` sovrascriveva l'esito `ok: true`.
 
 ### Cambiato
 

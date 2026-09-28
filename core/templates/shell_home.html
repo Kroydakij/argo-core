@@ -1,0 +1,166 @@
+{% extends "argo_cornice.html" %}
+{% block titolo %}Home{% endblock %}
+{% block stile %}
+  .griglia { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }
+  a.tile { background:var(--card); border:1px solid var(--bordo); border-radius:10px;
+           padding:16px; text-decoration:none; color:inherit; display:block; }
+  a.tile:hover { border-color:var(--acc); }
+  .tile .nome { font-weight:600; font-size:17px; display:flex; align-items:center; gap:8px; }
+  .tile .desc { color:var(--muto); font-size:13px; margin-top:6px; min-height:18px; }
+  .pallino { width:9px; height:9px; border-radius:50%; background:var(--muto);
+             display:inline-block; flex:none; }
+  .pallino.ok { background:var(--ok); } .pallino.ko { background:var(--ko); }
+  .vuoto { color:var(--muto); padding:12px 0; }
+  form.inline, .barra { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; margin-top:10px; }
+  th, td { border:1px solid var(--bordo); padding:5px 8px; text-align:left;
+           white-space:nowrap; max-width:340px; overflow:hidden; text-overflow:ellipsis; }
+  th { background:var(--card); position:sticky; top:0; }
+  .scroll { overflow:auto; max-height:60vh; border:1px solid var(--bordo); border-radius:8px; }
+  .stato-errore { color:var(--ko); } .stato-assente { color:var(--muto); }
+{% endblock %}
+{% block contenuto %}
+<h2>I tuoi moduli</h2>
+<div class="griglia">
+  {% for v in argo.menu %}
+    <a class="tile" href="{{ v.url }}">
+      <div class="nome"><span class="pallino" data-mod="{{ v.modulo }}"></span>{{ v.titolo }}</div>
+      <div class="desc">{{ v.modulo }}{% if v.esterno %} · link esterno{% endif %}</div>
+    </a>
+  {% else %}
+    <div class="vuoto">Nessun modulo disponibile per il tuo utente: chiedi a un
+      amministratore di assegnarti un ruolo.</div>
+  {% endfor %}
+</div>
+
+{% if gestione_utenti %}
+<h2>Amministrazione</h2>
+<p><a href="/utenti">Utenti, gruppi e ruoli →</a></p>
+{% endif %}
+
+{% if admin %}
+<h2>Registro moduli</h2>
+<div class="barra">
+  <button id="btn-rileggi">Rileggi moduli</button>
+  <span class="msg" id="msg-reg"></span>
+</div>
+<div class="scroll"><table id="tab-moduli"></table></div>
+
+<h2>Registra modulo legacy <span class="msg">(solo moduli senza manifest.toml)</span></h2>
+<form class="inline" id="form-mod">
+  <input id="f-nome" placeholder="nome" required>
+  <input id="f-porta" type="number" placeholder="porta" required min="1024" max="49151" style="width:110px">
+  <input id="f-desc" placeholder="descrizione" style="flex:1;min-width:200px">
+  <button class="primario">Salva</button>
+  <span class="msg" id="msg-mod"></span>
+</form>
+
+<h2>Browser database <span class="msg">(sola lettura)</span></h2>
+<div class="barra">
+  <select id="sel-db"><option value="">— database —</option></select>
+  <select id="sel-tab" disabled><option value="">— tabella —</option></select>
+  <button id="btn-prev" disabled>◀</button>
+  <button id="btn-next" disabled>▶</button>
+  <a id="lnk-csv" hidden><button type="button">Export CSV</button></a>
+  <span class="msg" id="msg-db"></span>
+</div>
+<div class="scroll" id="wrap-tabella" hidden><table id="tabella"></table></div>
+{% endif %}
+{% endblock %}
+
+{% block script %}
+<script>
+const $ = id => document.getElementById(id);
+/* tabella costruita SEMPRE con textContent: nessun dato diventa HTML */
+function riempi(tab, intest, righe) {
+  tab.replaceChildren();
+  const tr = tab.insertRow();
+  for (const h of intest) { const th = document.createElement("th"); th.textContent = h; tr.appendChild(th); }
+  for (const r of righe) {
+    const row = tab.insertRow();
+    for (const v of r) {
+      const c = row.insertCell();
+      if (v instanceof Node) c.appendChild(v); else c.textContent = v === null ? "" : String(v);
+    }
+  }
+}
+async function aggiornaSalute() {
+  try {
+    const d = await (await fetch("/api/health")).json();
+    document.querySelectorAll(".pallino[data-mod]").forEach(p => {
+      const vivo = d[p.dataset.mod];
+      p.classList.toggle("ok", vivo === true);
+      p.classList.toggle("ko", vivo === false);
+    });
+  } catch (e) {}
+}
+aggiornaSalute(); setInterval(aggiornaSalute, 30000);
+
+{% if admin %}
+async function post(url, dati) {
+  const r = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" },
+                               body: JSON.stringify(dati || {}) });
+  return { ok: r.ok, d: await r.json().catch(() => ({})) };
+}
+async function caricaRegistro() {
+  const d = await (await fetch("/api/moduli")).json();
+  $("f-porta").placeholder = "porta (prox: " + d.prossima_porta + ")";
+  riempi($("tab-moduli"), ["modulo", "versione", "porta", "origine", "stato", "attivo", ""],
+    d.moduli.map(m => {
+      const stato = document.createElement("span");
+      stato.textContent = m.stato + (m.errore ? ": " + m.errore : "");
+      stato.className = "stato-" + m.stato;
+      const b = document.createElement("button");
+      b.textContent = m.attivo ? "disattiva" : "attiva";
+      b.onclick = async () => { await post("/api/moduli/" + encodeURIComponent(m.nome) + "/toggle",
+                                           { attivo: !m.attivo }); caricaRegistro(); };
+      return [m.titolo || m.nome, m.versione || "", m.porta, m.origine, stato,
+              m.attivo ? "sì" : "no", b];
+    }));
+}
+$("btn-rileggi").onclick = async () => {
+  const r = await post("/api/moduli/rileggi");
+  $("msg-reg").textContent = r.ok ? `validi ${r.d.moduli.ok} · con errori ${r.d.moduli.errore} · assenti ${r.d.moduli.assente}` : "errore";
+  caricaRegistro();
+};
+$("form-mod").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const r = await post("/api/moduli", { nome:$("f-nome").value, porta:$("f-porta").value,
+                                        descrizione:$("f-desc").value });
+  $("msg-mod").textContent = r.ok ? "salvato" : (r.d.msg || "errore");
+  if (r.ok) { ev.target.reset(); caricaRegistro(); }
+});
+
+let offset = 0;
+async function caricaDatabases() {
+  for (const db of await (await fetch("/api/db/databases")).json())
+    $("sel-db").add(new Option(db.alias + " (" + db.file + ")", db.alias));
+}
+$("sel-db").addEventListener("change", async () => {
+  const db = $("sel-db").value, st = $("sel-tab");
+  st.replaceChildren(new Option("— tabella —", "")); st.disabled = !db;
+  $("wrap-tabella").hidden = true; $("lnk-csv").hidden = true;
+  if (!db) return;
+  for (const t of await (await fetch("/api/db/" + encodeURIComponent(db) + "/tabelle")).json())
+    st.add(new Option(t.nome + " · " + t.righe + " righe" + (t.tipo === "view" ? " (vista)" : ""), t.nome));
+});
+$("sel-tab").addEventListener("change", () => { offset = 0; caricaRighe(); });
+$("btn-prev").addEventListener("click", () => { offset = Math.max(0, offset - 50); caricaRighe(); });
+$("btn-next").addEventListener("click", () => { offset += 50; caricaRighe(); });
+async function caricaRighe() {
+  const db = $("sel-db").value, tab = $("sel-tab").value;
+  if (!db || !tab) return;
+  const base = "/api/db/" + encodeURIComponent(db);
+  const d = await (await fetch(base + "/righe/" + encodeURIComponent(tab) + "?offset=" + offset)).json();
+  riempi($("tabella"), d.colonne, d.righe);
+  $("wrap-tabella").hidden = false;
+  $("btn-prev").disabled = offset === 0;
+  $("btn-next").disabled = d.righe.length < 50;
+  $("lnk-csv").href = base + "/export/" + encodeURIComponent(tab) + ".csv";
+  $("lnk-csv").hidden = false;
+  $("msg-db").textContent = "offset " + offset;
+}
+caricaRegistro(); caricaDatabases();
+{% endif %}
+</script>
+{% endblock %}

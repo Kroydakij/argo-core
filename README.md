@@ -55,26 +55,30 @@ Solo stdlib: la suite gira su un Python 3.12+ appena installato.
 
 ## Porte
 
-La suite usa il blocco **4700-4799**: portale sulla **4700**, moduli dal
-4701 in su (il portale suggerisce la prossima libera). Il blocco e' scelto
+La suite usa il blocco **4700-4799**: shell sulla **4700**, moduli dal
+4701 in su (la shell suggerisce la prossima libera). Il blocco e' scelto
 per essere fuori dai default affollati (3000/4000/5000/8000/8080), fuori
 dalla lista delle porte "unsafe" che i browser rifiutano (es. la 6000) e
 sotto il range effimero di Windows (49152+). Un blocco contiguo = una sola
 eventuale regola firewall.
 
-## Portale
+## Shell (ex portale)
 
 ```
-pip install flask          # unico requisito oltre la stdlib
-python -m core.portal      # -> http://localhost:4700
+pip install flask                           # unico requisito oltre la stdlib
+python -m core.auth crea-admin <username>   # solo la prima volta
+python -m core.shell                        # -> http://localhost:4700
 ```
 
-Registro dei moduli con tile e health-check, browser database read-only su
-tutti i DB della cartella dati. Scritture protette da Basic Auth
-(ARGO_PORTAL_USER / ARGO_PORTAL_PASS; default admin/admin, da cambiare).
-La cartella dati e' `..\comune` (override: variabile ARGO_COMUNE); la
-config opzionale vive in `comune\portal.json` cosi' sopravvive agli
-aggiornamenti della cartella core.
+Login unico per tutta la suite (un modulo manda al login della shell e la
+sessione vale per tutti i moduli), menu dei moduli filtrato per permessi,
+gestione di utenti, gruppi e ruoli, registro dei moduli (scoperti da soli
+dai loro `manifest.toml`), health-check e browser database read-only.
+La cartella dati e' `..\comune` (override: variabile ARGO_COMUNE) e contiene
+anche la config di suite `argo.toml` (obbligatoria: vedi
+`CORE_CONTESTO_AI.md`), cosi' sopravvive agli aggiornamenti della cartella
+core. Se la shell e' spenta, chi ha gia' fatto login continua a lavorare
+nei moduli, ma nessuno puo' entrare.
 
 ## Fase 2 (0.3.0)
 

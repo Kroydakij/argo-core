@@ -102,7 +102,8 @@ chiedi: quasi sempre esiste una via stdlib o un helper di core.
 
 ```
 <root della suite>\
-├── comune\              ← cartella dati (ARGO_COMUNE): TUTTI i DB live + portal.json.
+├── comune\              ← cartella dati (ARGO_COMUNE): TUTTI i DB live, argo.toml,
+│                          core.sqlite (registro), auth.sqlite (utenti), _backup\.
 │                          MAI nei rilasci. Backup = copia di questa cartella.
 ├── core\                ← argo-core (si aggiorna sovrascrivendo la cartella)
 ├── modulo_a\            ← un modulo = una cartella sorella di core\
@@ -113,9 +114,9 @@ chiedi: quasi sempre esiste una via stdlib o un helper di core.
 └── modulo_b\
 ```
 
-**Porte**: blocco riservato **4700–4799**. Portale = `4700`, moduli dal `4701`
-in su. Il portale suggerisce la prossima porta libera (`GET /api/moduli` →
-`prossima_porta`); lo scaffolder la usa automaticamente se il portale è acceso.
+**Porte**: blocco riservato **4700–4799**. Shell = `4700`, moduli dal `4701`
+in su. La shell suggerisce la prossima porta libera (`GET /api/moduli` →
+`prossima_porta`); lo scaffolder la usa automaticamente se la shell è accesa.
 
 **Bootstrap di core** (nessuna installazione: vendoring puro). In testa
 all'`app.py` di ogni modulo:
@@ -139,7 +140,7 @@ python -m core.scaffold <nome> [--porta N] [--dir PATH]
 ```
 
 - `<nome>` deve essere un identificatore Python valido (lettere, cifre, `_`).
-- La porta viene chiesta al **registro del portale** se raggiungibile su
+- La porta viene chiesta al **registro della shell** se raggiungibile su
   `http://127.0.0.1:4700`; altrimenti vale `--porta`; altrimenti `4701`.
 - Non sovrascrive mai una cartella esistente.
 
@@ -493,16 +494,37 @@ blueprint(dbs: dict | Callable[[], dict], auth=None, name="adminbrowser") -> Blu
     #            /<alias>/export/<tab>.csv
 ```
 
-### core.portal — portale della suite (processo, richiede Flask)
+### core.shell — la shell della suite (kernel, processo, richiede Flask)
 
 ```
-python -m core.portal        # -> http://localhost:4700
+python -m core.auth crea-admin <username>   # solo la prima volta
+python -m core.shell                        # -> http://localhost:4700
 ```
 
-Registro moduli (`comune/core.sqlite`, il portale ne è l'unico scrittore,
-schema gestito con `core.migrazioni`), health-check (`/api/health`), browser
-DB su tutta la cartella dati, config in `comune/portal.json`. Scritture
-protette da Basic Auth (`ARGO_PORTAL_USER`/`ARGO_PORTAL_PASS`).
+Login unico (cookie `argo_sessione`, vale per tutti i moduli sullo stesso
+host), logout, "cambia password", home con i moduli che l'utente può usare,
+amministrazione utenti/gruppi/ruoli (`/utenti`, permesso `core.utenti`),
+registro moduli + health-check + browser DB read-only (permesso
+`core.admin`). Unico scrittore di `core.sqlite` e `auth.sqlite`.
+
+Config obbligatoria `comune/argo.toml` (fail-fast, `core.config.carica_suite`):
+
+```toml
+[suite]
+titolo = "ARGO"            # facoltativo
+porta = 4700               # facoltativo
+[auth]
+durata_sessione_ore = 12   # obbligatorio
+```
+
+**Cornice comune**: i template di un modulo inizializzato con
+`auth.inizializza()` possono fare `{% extends "argo_cornice.html" %}` (blocchi
+`titolo`, `stile`, `contenuto`, `script`): barra con titolo della suite, menu
+dei moduli **filtrato per i permessi** dell'utente, nome utente, "esci". La
+variabile `argo` (utente, menu, url della shell) è disponibile in ogni
+template. Il registro si legge con `core.registro` (stdlib).
+
+`core.portal` resta come alias deprecato di `core.shell` per una minor.
 
 I moduli con `manifest.toml` nelle cartelle sorelle di `core\` vengono
 **scoperti da soli** all'avvio e con `POST /api/moduli/rileggi` (admin):
@@ -607,7 +629,7 @@ soddisfatta, il modulo non è pronto.
 - [ ] Flask è importato **lazy** (dentro `create_app()`), così il modulo è
       importabile e testabile senza Flask?
 - [ ] Zero dipendenze oltre stdlib + Flask? Niente npm/build step?
-- [ ] Porta nel blocco 4700–4799, presa dal registro del portale se possibile,
+- [ ] Porta nel blocco 4700–4799, presa dal registro della shell se possibile,
       e documentata nel README del modulo?
 - [ ] Ci sono i test (`unittest`), verdi con
       `python -m unittest discover tests -v`, anche senza Flask installato?

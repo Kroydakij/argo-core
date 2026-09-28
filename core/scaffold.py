@@ -101,8 +101,8 @@ def _aggiungi_core_al_path() -> None:
 
 
 _aggiungi_core_al_path()
+from core import auth, manifest, migrate, migrazioni  # noqa: E402
 from core import config as corecfg  # noqa: E402
-from core import migrate, migrazioni  # noqa: E402
 
 QUI = Path(__file__).resolve().parent
 CONFIG_PATH = QUI / "{nome}.toml"
@@ -110,6 +110,9 @@ CONFIG_PATH = QUI / "{nome}.toml"
 # accanto al modulo, per farlo girare subito; in produzione punta ad ARGO_COMUNE.
 COMUNE = Path(os.environ.get("ARGO_COMUNE", QUI / "dati"))
 DB_PATH = COMUNE / "{nome}.sqlite"
+# identita' della suite: scritta dalla shell, qui letta in sola lettura
+AUTH_DB = COMUNE / "auth.sqlite"
+MANIFEST = manifest.carica(QUI)          # fail-fast se manifest.toml non e' valido
 
 
 # --- schema: passi di migrazione numerati (core.migrazioni) ------------
@@ -140,7 +143,7 @@ def carica_config() -> dict:
 
 def create_app():
     """App Flask. Flask importato lazy: lo scheletro e' testabile senza Flask."""
-    from flask import Flask, render_template
+    from flask import Flask, jsonify, render_template
     cfg = carica_config()
     # template_folder assoluto: lo scheletro risponde qualunque sia il modo di
     # lancio (python app.py, import, WSGI), senza dipendere dalla cwd.
@@ -148,10 +151,18 @@ def create_app():
     app.config["TITOLO"] = corecfg.optional(cfg, "app", "titolo", default="{titolo}")
 
     @app.get("/")
+    @auth.richiede_permesso("{nome}.vedi")      # dichiarato in manifest.toml
     def home():
         return render_template("index.html", titolo=app.config["TITOLO"])
 
-    return app
+    @app.get("/api/health")
+    @auth.pubblica                             # unica route senza login
+    def health():
+        return jsonify({{"ok": True}})
+
+    # SEMPRE per ultima: login unico della suite, permessi, cornice comune.
+    # Serve la shell (python -m core.shell) avviata almeno una volta.
+    return auth.inizializza(app, manifest=MANIFEST, auth_db=AUTH_DB)
 
 
 if __name__ == "__main__":
@@ -212,14 +223,13 @@ tipi = []                  # tipi di anagrafica usati, es. ["macchina"]
 
 
 def _index_html(nome: str) -> str:
-    return f'''<!doctype html>
-<html lang="it">
-<head><meta charset="utf-8"><title>{{{{ titolo }}}}</title></head>
-<body>
+    return f'''{{% extends "argo_cornice.html" %}}
+{{# cornice comune della suite: barra, menu dei moduli, utente, logout #}}
+{{% block titolo %}}{{{{ titolo }}}}{{% endblock %}}
+{{% block contenuto %}}
   <h1>{{{{ titolo }}}}</h1>
-  <p>Modulo <strong>{nome}</strong> attivo. Scheletro generato da core.scaffold.</p>
-</body>
-</html>
+  <p>Modulo <strong>{nome}</strong> attivo. Ciao {{{{ argo.utente.nome or argo.utente.username }}}}.</p>
+{{% endblock %}}
 '''
 
 
@@ -234,10 +244,19 @@ Scheletro generato da `core.scaffold`.
 
 ## Avvio
 
+Il modulo usa il login unico della suite: serve la shell (porta 4700)
+avviata almeno una volta sulla stessa cartella dati (`ARGO_COMUNE`).
+
 ```
 pip install flask
-python app.py            # -> http://localhost:{porta}
+python -m core.auth crea-admin <tuo_utente>   # solo la prima volta
+python -m core.shell                          # -> http://localhost:4700
+python app.py                                 # -> http://localhost:{porta}
 ```
+
+Dalla shell assegna a un ruolo il permesso `{nome}.vedi`, poi il modulo
+compare nel menu. Tutte le route richiedono login, salvo quelle marcate
+`@auth.pubblica` (es. `/api/health`).
 
 ## Come estenderlo
 
@@ -248,10 +267,11 @@ python app.py            # -> http://localhost:{porta}
   Stato per il supporto: `python -m core.migrazioni stato <file.sqlite>`.
 - Stato event-sourced: `core.events` (log append-only + `latest_state_per_entity`).
 - Transizioni: `core.statemachine`. Form: `core.forms`. Board: `core.board`.
-  Turni: `core.shifts`. Auth a ruoli: `core.auth`.
+  Turni: `core.shifts`. Permessi: `@auth.richiede_permesso("{nome}.<azione>")`
+  dopo averli dichiarati in `manifest.toml`.
 - `manifest.toml` dichiara nome, versione, permessi, voci di menu, tipi di
   anagrafica ed eventi: aggiornalo quando aggiungi un permesso o un evento.
-- Il portale trova il modulo da solo leggendo `manifest.toml` (deploy =
+- La shell trova il modulo da solo leggendo `manifest.toml` (deploy =
   copia della cartella accanto a `core`); dopo un aggiornamento: "rileggi
   moduli" (`POST /api/moduli/rileggi`).
 '''

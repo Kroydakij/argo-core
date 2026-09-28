@@ -89,15 +89,42 @@ class TestScaffold(unittest.TestCase):
 
     @unittest.skipUnless(HA_FLASK, "Flask non installato")
     def test_scheletro_risponde_su_root(self):
+        from core import auth, db
         base = scaffold.genera("vetrina", 4703, self.dir)
         import os
-        os.environ["ARGO_COMUNE"] = str(base / "dati")
+        dati = base / "dati"
+        # identita' della suite come la prepara la shell: utente con vetrina.vedi
+        admin = auth.crea_admin(dati / "auth.sqlite", "admin", "pw")
+        con = db.owned(dati / "auth.sqlite")
+        r = auth.definisci_ruolo(con, "Vetrina", ["vetrina.vedi"], attore=admin)
+        auth.assegna_ruolo(con, r, utente_id=admin, attore=admin)
+        token = auth.login(con, "admin", "pw", durata_ore=1)
+        con.close()
+        os.environ["ARGO_COMUNE"] = str(dati)
         try:
             mod = _importa(base / "app.py", "modgen_vetrina")
             mod.migrate_db()
             client = mod.create_app().test_client()
+            self.assertEqual(client.get("/", headers={"Accept": "text/html"})
+                             .status_code, 302)            # senza login: alla shell
+            self.assertEqual(client.get("/api/health").status_code, 200)
+            client.set_cookie(auth.COOKIE, token, domain="localhost")
             r = client.get("/")
             self.assertEqual(r.status_code, 200)
+            self.assertIn("argo-barra", r.get_data(as_text=True))   # cornice comune
+        finally:
+            os.environ.pop("ARGO_COMUNE", None)
+
+    @unittest.skipUnless(HA_FLASK, "Flask non installato")
+    def test_scheletro_senza_shell_non_parte(self):
+        from core import auth
+        base = scaffold.genera("orfano", 4704, self.dir)
+        import os
+        os.environ["ARGO_COMUNE"] = str(base / "dati")
+        try:
+            mod = _importa(base / "app.py", "modgen_orfano")
+            with self.assertRaises(auth.AuthError):
+                mod.create_app()                            # auth.sqlite assente
         finally:
             os.environ.pop("ARGO_COMUNE", None)
 
