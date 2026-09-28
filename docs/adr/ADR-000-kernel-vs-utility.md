@@ -1,6 +1,6 @@
 # ADR-000 — Kernel vs utility
 
-- **Stato**: Proposto
+- **Stato**: Accettato (2026-09-28)
 - **Data**: 2026-09-27
 - **Riguarda**: struttura di `core/`, definizione di "modulo conforme", politica di stabilità 1.0
 
@@ -161,10 +161,9 @@ UTILITY = ("statemachine", "shifts", "schedule", "forms", "board",
 - Regola nuova e vincolante per le utility che scrivono log: `inventory`
   cambia (ADR-002, ADR-005).
 
-### Punti aperti per la revisione
+### Decisioni prese in revisione (2026-09-28)
 
-- `inventory` resta utility (il pattern "anagrafica + movimenti" è generico)
-  oppure diventa un modulo di esempio fuori da `core/`? Qui si propone:
-  resta utility, ma i suoi articoli diventano un tipo di anagrafica.
-- `adminbrowser` legge tutti i DB: in 1.0 va dietro al permesso `core.admin`
-  (ADR-001). Resta utility perché non deve dare "la stessa risposta".
+- `inventory` resta utility (il pattern "anagrafica + movimenti" è generico),
+  ma i suoi articoli diventano un tipo di anagrafica.
+- `adminbrowser` resta utility e in 1.0 va dietro al permesso `core.admin`
+  (ADR-001).

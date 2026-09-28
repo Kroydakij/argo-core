@@ -1,6 +1,6 @@
 # ADR-001 — Autenticazione e autorizzazione
 
-- **Stato**: Proposto
+- **Stato**: Accettato (2026-09-28)
 - **Data**: 2026-09-27
 - **Riguarda**: `core.auth` (riscritto), `core.portal` → shell, permessi nei manifest (ADR-003)
 - **Rompe l'API**: sì (vedi *Rotture API*)
@@ -262,10 +262,11 @@ l'assegnazione (attore = `sistema`).
 | `python -m core.portal` | `python -m core.shell` (alias deprecato) |
 | tabella `utenti` nel DB del modulo | non più usata (resta nel file, regola additiva; importabile) |
 
-### Punti aperti per la revisione
+### Decisioni prese in revisione (2026-09-28)
 
-- Durata sessione unica per suite o per gruppo (es. postazioni condivise di
-  reparto con durata breve)? Proposta: unica in 1.0.
-- Postazioni condivise (un PC, più operatori a turno): basta il logout
-  esplicito, o serve "cambio utente rapido" (badge/PIN) già in 1.0?
-  Proposta: fuori scope, ma il backend pluggable è il punto d'aggancio.
+- Nome del processo: `core.shell`.
+- Durata della sessione: **unica per suite** in 1.0
+  (`[auth] durata_sessione_ore` in `comune/argo.toml`).
+- Postazioni condivise: in 1.0 basta il logout esplicito. Il "cambio utente
+  rapido" (badge/PIN) è fuori scope; il backend pluggable è il punto
+  d'aggancio per aggiungerlo.
